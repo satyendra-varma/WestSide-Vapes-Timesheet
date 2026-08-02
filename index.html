@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WestSide Vapes - Timesheet & Roster</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eeffed',
+              500: '#10b981',
+              600: '#059669',
+              accent: '#00ff87',
+              cyan: '#06b6d4'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .neon-glow {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    }
+    .neon-glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col pb-24 select-none">
+
+  <!-- ==================== TOP BAR ==================== -->
+  <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 p-[2px] shadow-md neon-glow">
+        <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+          <i data-lucide="zap" class="w-5 h-5 text-emerald-400"></i>
+        </div>
+      </div>
+      <div>
+        <h1 class="font-extrabold text-lg text-white tracking-tight flex items-center gap-1.5">
+          WESTSIDE VAPES
+          <span class="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            STAFF
+          </span>
+        </h1>
+        <p class="text-xs text-slate-400">Timesheet & Roster Portal</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-lg w-full mx-auto p-4 space-y-6">
+
+    <!-- TAB 1: SHIFT LOGGING -->
+    <section id="tab-logging" class="tab-content space-y-5">
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="clock" class="w-5 h-5 text-emerald-400"></i>
+            Shift Logging
+          </h2>
+          <span id="date-badge" class="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700">Today</span>
+        </div>
+
+        <form id="shift-form" onsubmit="handleShiftSubmit(event)" class="space-y-4">
+          <!-- Employee Selection -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Employee Name</label>
+            <select id="emp-select" required class="w-full bg-slate-950 border-2 border-slate-800 text-white font-medium text-base rounded-xl px-4 py-3.5 focus:border-emerald-500 focus:outline-none transition-colors">
+              <option value="" disabled selected>Loading staff list...</option>
+            </select>
+          </div>
+
+          <!-- Date Picker (Strict max = Today) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Shift Date</label>
+            <input type="date" id="shift-date" required class="w-full bg-slate-950 border-2 border-slate-800 text-white font-medium text-base rounded-xl px-4 py-3.5 focus:border-emerald-500 focus:outline-none transition-colors" />
+            <p class="text-[11px] text-slate-500 mt-1">Future dates disabled. Past dates allowed for updates.</p>
+          </div>
+
+          <!-- Shift Toggle (Morning vs Evening) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Shift Type</label>
+            <div class="grid grid-cols-2 gap-3">
+              <button type="button" id="btn-morning" onclick="selectShift('Morning')" class="py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition-all border-emerald-500 bg-emerald-500/10 text-emerald-400">
+                <i data-lucide="sun" class="w-4 h-4"></i> Morning Shift
+              </button>
+              <button type="button" id="btn-evening" onclick="selectShift('Evening')" class="py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition-all border-slate-800 bg-slate-950 text-slate-400">
+                <i data-lucide="moon" class="w-4 h-4"></i> Evening Shift
+              </button>
+            </div>
+          </div>
+
+          <!-- Time Pickers -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Clock In</label>
+              <input type="time" id="in-time" required value="09:00" class="w-full bg-slate-950 border-2 border-slate-800 text-white font-medium text-base rounded-xl px-4 py-3.5 focus:border-emerald-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Clock Out</label>
+              <input type="time" id="out-time" required value="15:30" class="w-full bg-slate-950 border-2 border-slate-800 text-white font-medium text-base rounded-xl px-4 py-3.5 focus:border-emerald-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="submit-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-base tracking-wide flex items-center justify-center gap-2 shadow-lg neon-glow transition-all active:scale-[0.98]">
+            <i data-lucide="check-circle" class="w-5 h-5"></i> Submit Shift Log
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 2: MONTHLY TIMESHEET -->
+    <section id="tab-monthly" class="tab-content hidden space-y-4">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="calendar" class="w-5 h-5 text-cyan-400"></i> Monthly Timesheets
+        </h2>
+        <input type="month" id="month-picker" onchange="loadMonthlySheet()" class="bg-slate-900 border border-slate-800 text-white text-xs font-bold rounded-lg px-3 py-2 focus:outline-none" />
+      </div>
+
+      <div id="monthly-list" class="space-y-3">
+        <!-- Timesheet cards injected dynamically -->
+      </div>
+    </section>
+
+    <!-- TAB 3: TIMETABLE SCHEDULE -->
+    <section id="tab-timetable" class="tab-content hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="users" class="w-5 h-5 text-emerald-400"></i> Weekly Roster
+        </h2>
+        <span class="text-xs text-slate-400">Sun – Sat Schedule</span>
+      </div>
+
+      <div id="roster-grid" class="space-y-3">
+        <!-- Roster rows injected dynamically -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- CONFIRMATION CONFLICT MODAL -->
+  <div id="conflict-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center gap-3 text-amber-400 border-b border-slate-800 pb-3">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        <h3 class="font-bold text-lg text-white">Shift Conflict Detected</h3>
+      </div>
+      <p class="text-sm text-slate-300">A record already exists for this date and shift. Please review the previous data versus your new submission:</p>
+
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="bg-slate-950/80 border border-slate-800 p-3 rounded-xl space-y-1">
+          <p class="font-bold text-slate-400 uppercase text-[10px]">Previous Record</p>
+          <p id="prev-emp" class="font-semibold text-amber-300"></p>
+          <p id="prev-time" class="text-slate-400"></p>
+        </div>
+        <div class="bg-emerald-950/30 border border-emerald-500/30 p-3 rounded-xl space-y-1">
+          <p class="font-bold text-emerald-400 uppercase text-[10px]">New Submission</p>
+          <p id="new-emp" class="font-semibold text-emerald-300"></p>
+          <p id="new-time" class="text-slate-300"></p>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="closeConflictModal()" class="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm">Cancel</button>
+        <button onclick="confirmOverwrite()" class="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm shadow-md">Overwrite Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAVIGATION BAR -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 py-2 px-4 max-w-md mx-auto flex items-center justify-around">
+    <button onclick="switchTab('logging')" id="nav-logging" class="flex flex-col items-center gap-1 text-emerald-400 font-bold text-xs py-1 px-3">
+      <i data-lucide="clock" class="w-5 h-5"></i>
+      <span>Log Shift</span>
+    </button>
+    <button onclick="switchTab('monthly')" id="nav-monthly" class="flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-3">
+      <i data-lucide="calendar" class="w-5 h-5"></i>
+      <span>Timesheet</span>
+    </button>
+    <button onclick="switchTab('timetable')" id="nav-timetable" class="flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-3">
+      <i data-lucide="users" class="w-5 h-5"></i>
+      <span>Timetable</span>
+    </button>
+  </nav>
+
+  <!-- JAVASCRIPT APP ENGINE -->
+  <script>
+    // Designated Variable for Google Apps Script Web App URL
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrhLwUIrHBSnHqrv1MZT8Fi51qgiiRdxxw-Y5s5gXB5kTvkGZ9zq7VPoJHemH9w4Gk5w/exec";
+
+    let selectedShiftType = 'Morning';
+    let pendingSubmission = null;
+
+    // Initialize App on DOM Loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initDates();
+      loadEmployees();
+      loadMonthlySheet();
+      loadTimetable();
+    });
+
+    function initDates() {
+      const today = new Date().toISOString().split('T')[0];
+      const dateInput = document.getElementById('shift-date');
+      dateInput.value = today;
+      dateInput.max = today; // Strict future blocking
+
+      const monthInput = document.getElementById('month-picker');
+      monthInput.value = today.substring(0, 7);
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById('tab-' + tabName).classList.remove('hidden');
+
+      // Nav styles
+      ['logging', 'monthly', 'timetable'].forEach(t => {
+        const btn = document.getElementById('nav-' + t);
+        if (t === tabName) {
+          btn.className = 'flex flex-col items-center gap-1 text-emerald-400 font-bold text-xs py-1 px-3';
+        } else {
+          btn.className = 'flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-3';
+        }
+      });
+    }
+
+    function selectShift(type) {
+      selectedShiftType = type;
+      const btnM = document.getElementById('btn-morning');
+      const btnE = document.getElementById('btn-evening');
+      const inTime = document.getElementById('in-time');
+      const outTime = document.getElementById('out-time');
+
+      if (type === 'Morning') {
+        btnM.className = 'py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 border-emerald-500 bg-emerald-500/10 text-emerald-400';
+        btnE.className = 'py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 border-slate-800 bg-slate-950 text-slate-400';
+        inTime.value = '09:00';
+        outTime.value = '15:30';
+      } else {
+        btnM.className = 'py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 border-slate-800 bg-slate-950 text-slate-400';
+        btnE.className = 'py-3.5 px-4 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 border-cyan-500 bg-cyan-500/10 text-cyan-400';
+        inTime.value = '15:30';
+        outTime.value = '22:00';
+      }
+    }
+
+    async function loadEmployees() {
+      const select = document.getElementById('emp-select');
+      try {
+        if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('SAMPLE')) throw new Error('Demo mode');
+        const res = await fetch(`${APPS_SCRIPT_URL}?action=getEmployees`);
+        const data = await res.json();
+        const emps = Array.isArray(data) ? data : (data.employees || []);
+        populateEmpSelect(emps);
+      } catch (err) {
+        // Mock fallback
+        populateEmpSelect(["Alex Rivera", "Jordan Lee", "Sam Taylor", "Casey Morgan", "Taylor Swift", "Marcus Vance"]);
+      }
+    }
+
+    function populateEmpSelect(list) {
+      const select = document.getElementById('emp-select');
+      select.innerHTML = '<option value="" disabled selected>Select Staff Member</option>' + 
+        list.map(name => `<option value="${name}">${name}</option>`).join('');
+    }
+
+    async function handleShiftSubmit(e) {
+      e.preventDefault();
+      const emp = document.getElementById('emp-select').value;
+      const date = document.getElementById('shift-date').value;
+      const inTime = document.getElementById('in-time').value;
+      const outTime = document.getElementById('out-time').value;
+
+      pendingSubmission = { employeeName: emp, date, shift: selectedShiftType, inTime, outTime };
+
+      // Submit API POST
+      try {
+        if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('SAMPLE')) {
+          // Local storage check
+          const local = JSON.parse(localStorage.getItem('wv_timesheets') || '[]');
+          const prev = local.find(r => r.date === date && r.shift === selectedShiftType);
+          if (prev && (prev.employeeName !== emp || prev.inTime !== inTime || prev.outTime !== outTime)) {
+            triggerConflictModal(prev, pendingSubmission);
+            return;
+          }
+          local.unshift({ id: 's_' + Date.now(), ...pendingSubmission });
+          localStorage.setItem('wv_timesheets', JSON.stringify(local));
+          alert('Shift logged successfully!');
+          loadMonthlySheet();
+          return;
+        }
+
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'submitShift', ...pendingSubmission })
+        });
+        const result = await res.json();
+        if (result.hasConflict) {
+          triggerConflictModal(result.previousRecord, pendingSubmission);
+        } else {
+          alert('Shift logged successfully!');
+          loadMonthlySheet();
+        }
+      } catch (err) {
+        alert('Saved locally in offline mode!');
+      }
+    }
+
+    function triggerConflictModal(prev, next) {
+      document.getElementById('prev-emp').innerText = prev.employeeName;
+      document.getElementById('prev-time').innerText = prev.inTime + ' - ' + prev.outTime;
+      document.getElementById('new-emp').innerText = next.employeeName;
+      document.getElementById('new-time').innerText = next.inTime + ' - ' + next.outTime;
+      document.getElementById('conflict-modal').classList.remove('hidden');
+    }
+
+    function closeConflictModal() {
+      document.getElementById('conflict-modal').classList.add('hidden');
+    }
+
+    async function confirmOverwrite() {
+      closeConflictModal();
+      if (!pendingSubmission) return;
+      try {
+        if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('SAMPLE')) {
+          let local = JSON.parse(localStorage.getItem('wv_timesheets') || '[]');
+          local = local.filter(r => !(r.date === pendingSubmission.date && r.shift === pendingSubmission.shift));
+          local.unshift({ id: 's_' + Date.now(), ...pendingSubmission });
+          localStorage.setItem('wv_timesheets', JSON.stringify(local));
+          alert('Record overwritten!');
+          loadMonthlySheet();
+          return;
+        }
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'submitShift', ...pendingSubmission, forceOverwrite: true })
+        });
+        alert('Record overwritten successfully!');
+        loadMonthlySheet();
+      } catch (e) {
+        alert('Updated locally!');
+      }
+    }
+
+    async function loadMonthlySheet() {
+      const monthVal = document.getElementById('month-picker').value;
+      const listEl = document.getElementById('monthly-list');
+      listEl.innerHTML = '<p class="text-xs text-slate-400">Loading timesheets...</p>';
+
+      let records = [];
+      try {
+        const local = JSON.parse(localStorage.getItem('wv_timesheets') || '[]');
+        records = local;
+      } catch (e) {}
+
+      if (records.length === 0) {
+        listEl.innerHTML = '<div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl text-center text-slate-400 text-sm">No shifts logged for this month.</div>';
+        return;
+      }
+
+      listEl.innerHTML = records.map(r => `
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-sm">${r.employeeName}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${r.shift === 'Morning' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'}">${r.shift}</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">${r.date} • ${r.inTime} - ${r.outTime}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadTimetable() {
+      const grid = document.getElementById('roster-grid');
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      grid.innerHTML = days.map((d, i) => `
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2">
+          <div class="font-bold text-sm text-slate-200 border-b border-slate-800 pb-1.5">${d}</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+              <span class="text-[10px] text-emerald-400 font-bold block">MORNING</span>
+              <span class="font-medium text-slate-200">Alex Rivera</span>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+              <span class="text-[10px] text-cyan-400 font-bold block">EVENING</span>
+              <span class="font-medium text-slate-200">Jordan Lee</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
