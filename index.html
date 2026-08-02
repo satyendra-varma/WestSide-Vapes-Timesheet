@@ -277,13 +277,16 @@
         const emps = Array.isArray(data) ? data : (data.employees || []);
         populateEmpSelect(emps);
       } catch (err) {
-        // Mock fallback
-        populateEmpSelect(["Alex Rivera", "Jordan Lee", "Sam Taylor", "Casey Morgan", "Taylor Swift", "Marcus Vance"]);
+        populateEmpSelect([]);
       }
     }
 
     function populateEmpSelect(list) {
       const select = document.getElementById('emp-select');
+      if (!list || list.length === 0) {
+        select.innerHTML = '<option value="" disabled selected>No employees loaded from sheet</option>';
+        return;
+      }
       select.innerHTML = '<option value="" disabled selected>Select Staff Member</option>' + 
         list.map(name => `<option value="${name}">${name}</option>`).join('');
     }
@@ -399,22 +402,72 @@
 
     async function loadTimetable() {
       const grid = document.getElementById('roster-grid');
+      grid.innerHTML = `
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+          <div class="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+          <p class="text-xs font-semibold">Fetching weekly roster from Google Sheets...</p>
+        </div>
+      `;
+
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      grid.innerHTML = days.map((d, i) => `
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2">
-          <div class="font-bold text-sm text-slate-200 border-b border-slate-800 pb-1.5">${d}</div>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
-              <span class="text-[10px] text-emerald-400 font-bold block">MORNING</span>
-              <span class="font-medium text-slate-200">Alex Rivera</span>
+      const todayName = days[new Date().getDay()];
+
+      let timetableData = [];
+      try {
+        if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes('SAMPLE')) {
+          const res = await fetch(`${APPS_SCRIPT_URL}?action=getTimetable`);
+          timetableData = await res.json();
+        }
+      } catch (err) {
+        console.error('Error fetching timetable:', err);
+      }
+
+      grid.innerHTML = days.map((d) => {
+        let morning = 'Unassigned';
+        let evening = 'Unassigned';
+
+        if (Array.isArray(timetableData)) {
+          const row = timetableData.find(r => Array.isArray(r) && String(r[0]).trim().toLowerCase() === d.toLowerCase());
+          if (row) {
+            const mVal = row[1] ? String(row[1]).trim() : '';
+            const eVal = row[2] ? String(row[2]).trim() : '';
+
+            if (mVal && !['morning', 'morning shift', 'employee', 'name'].includes(mVal.toLowerCase())) {
+              morning = mVal;
+            }
+            if (eVal && !['evening', 'evening shift', 'employee', 'name'].includes(eVal.toLowerCase())) {
+              evening = eVal;
+            }
+          }
+        }
+
+        const isToday = d === todayName;
+
+        return `
+          <div class="bg-slate-900/90 border rounded-2xl p-4 space-y-3 shadow-lg ${isToday ? 'border-emerald-500/60 shadow-emerald-950/40 bg-gradient-to-r from-slate-900 via-emerald-950/20 to-slate-900' : 'border-slate-800'}">
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="font-extrabold text-sm text-white">${d}</span>
+                ${isToday ? '<span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Today</span>' : ''}
+              </div>
             </div>
-            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
-              <span class="text-[10px] text-cyan-400 font-bold block">EVENING</span>
-              <span class="font-medium text-slate-200">Jordan Lee</span>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div class="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-3 space-y-1">
+                <div class="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[10px] uppercase tracking-wider">
+                  Morning (09:00 - 15:30)
+                </div>
+                <p class="font-black text-white text-sm tracking-tight truncate">${morning}</p>
+              </div>
+              <div class="bg-slate-950/90 border border-cyan-500/30 rounded-xl p-3 space-y-1">
+                <div class="flex items-center gap-1.5 text-cyan-400 font-extrabold text-[10px] uppercase tracking-wider">
+                  Evening (15:30 - 22:00)
+                </div>
+                <p class="font-black text-white text-sm tracking-tight truncate">${evening}</p>
+              </div>
             </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
   </script>
 </body>
