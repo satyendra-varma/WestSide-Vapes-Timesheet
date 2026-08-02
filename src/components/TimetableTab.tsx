@@ -159,7 +159,7 @@ export const TimetableTab: React.FC = () => {
                   <div className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-3 space-y-1">
                     <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[10px] uppercase tracking-wider">
                       <Sun className="w-3.5 h-3.5" />
-                      Morning (09:00 - 15:30)
+                      Morning (09:00 - 16:00)
                     </div>
                     <p className="font-black text-white text-sm tracking-tight truncate">
                       {morningEmp}
@@ -170,7 +170,7 @@ export const TimetableTab: React.FC = () => {
                   <div className="bg-slate-950/90 border border-cyan-500/30 rounded-xl p-3 space-y-1">
                     <div className="flex items-center gap-1.5 text-cyan-400 font-extrabold text-[10px] uppercase tracking-wider">
                       <Moon className="w-3.5 h-3.5" />
-                      Evening (15:30 - 22:00)
+                      Evening (16:00 - 23:00)
                     </div>
                     <p className="font-black text-white text-sm tracking-tight truncate">
                       {eveningEmp}

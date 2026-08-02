@@ -18,13 +18,10 @@ export const SHOP_INFO = {
 };
 
 export const INITIAL_EMPLOYEES = [
-  "Alex Rivera",
-  "Jordan Lee",
-  "Sam Taylor",
-  "Casey Morgan",
-  "Taylor Swift",
-  "Marcus Vance",
-  "Devon Rex"
+  "Satyendra",
+  "Kunal",
+  "Kandarp",
+  "Kunal Guptha"
 ];
 
 // Get current date string in YYYY-MM-DD
