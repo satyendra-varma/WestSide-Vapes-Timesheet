@@ -14,8 +14,9 @@ export default function App() {
   const [scriptUrl, setScriptUrl] = useState<string>(getSavedScriptUrl());
   const [monthlyRefreshTrigger, setMonthlyRefreshTrigger] = useState<number>(0);
 
-  // Background parallel pre-fetching on mount to eliminate latency
+  // Set document title and pre-fetch data on mount
   useEffect(() => {
+    document.title = 'WestSide Vapes Timesheet';
     prefetchAllData();
   }, [scriptUrl]);
 
