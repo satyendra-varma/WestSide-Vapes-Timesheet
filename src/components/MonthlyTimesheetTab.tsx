@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Search, Filter, Clock, Edit2, Trash2, Check, X, RefreshCw, User, Sun, Moon } from 'lucide-react';
-import { fetchTimesheet, updateShiftApi, deleteShiftApi } from '../services/api';
+import { fetchTimesheet, updateShiftApi, deleteShiftApi, getCachedTimesheet } from '../services/api';
 import { ShiftRecord } from '../types';
 import { calculateShiftHours } from '../config';
 
@@ -15,8 +15,12 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [filterEmployee, setFilterEmployee] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [records, setRecords] = useState<ShiftRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+
+  const [records, setRecords] = useState<ShiftRecord[]>(() => {
+    const [year, month] = currentMonthStr.split('-').map(Number);
+    return getCachedTimesheet(month, year);
+  });
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Edit Modal State
   const [editingRecord, setEditingRecord] = useState<ShiftRecord | null>(null);
@@ -30,11 +34,23 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
 
   useEffect(() => {
     loadMonthlyData();
+    const handleRefreshed = () => {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      setRecords(getCachedTimesheet(month, year));
+    };
+    window.addEventListener('westside_vapes_data_refreshed', handleRefreshed);
+    return () => window.removeEventListener('westside_vapes_data_refreshed', handleRefreshed);
   }, [selectedMonth, refreshTrigger]);
 
   const loadMonthlyData = async () => {
-    setLoading(true);
     const [year, month] = selectedMonth.split('-').map(Number);
+    const cached = getCachedTimesheet(month, year);
+    setRecords(cached);
+
+    if (cached.length === 0) {
+      setLoading(true);
+    }
+
     try {
       const res = await fetchTimesheet(month, year);
       setRecords(res.records);

@@ -1,17 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { ShiftLoggingTab } from './components/ShiftLoggingTab';
 import { MonthlyTimesheetTab } from './components/MonthlyTimesheetTab';
 import { TimetableTab } from './components/TimetableTab';
 import { SettingsModal } from './components/SettingsModal';
-import { getSavedScriptUrl } from './services/api';
+import { getSavedScriptUrl, fetchEmployees, fetchTimetable, fetchTimesheet } from './services/api';
+
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('logging');
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [scriptUrl, setScriptUrl] = useState<string>(getSavedScriptUrl());
   const [monthlyRefreshTrigger, setMonthlyRefreshTrigger] = useState<number>(0);
+
+  // Background parallel pre-fetching on mount to eliminate latency
+  useEffect(() => {
+    prefetchAllData();
+  }, [scriptUrl]);
+
+  const prefetchAllData = async () => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    try {
+      await Promise.all([
+        fetchEmployees(),
+        fetchTimetable(),
+        fetchTimesheet(currentMonth, currentYear),
+      ]);
+      window.dispatchEvent(new Event('westside_vapes_data_refreshed'));
+    } catch (err) {
+      console.warn('Parallel background pre-fetch failed:', err);
+    }
+  };
 
   const handleUrlUpdated = () => {
     setScriptUrl(getSavedScriptUrl());
@@ -20,6 +43,7 @@ export default function App() {
   const handleShiftSubmitted = () => {
     // Trigger auto refresh for monthly timesheet tab
     setMonthlyRefreshTrigger((prev) => prev + 1);
+    window.dispatchEvent(new Event('westside_vapes_data_refreshed'));
   };
 
   return (

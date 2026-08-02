@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Sun, Moon, Edit3, RefreshCw, Check, X, Sparkles } from 'lucide-react';
-import { fetchTimetable, updateTimetableLocal, fetchEmployees } from '../services/api';
+import { fetchTimetable, updateTimetableLocal, fetchEmployees, getCachedTimetable, getCachedEmployees } from '../services/api';
 import { DaySchedule } from '../types';
 
 export const TimetableTab: React.FC = () => {
-  const [timetable, setTimetable] = useState<DaySchedule[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [employees, setEmployees] = useState<string[]>([]);
+  const [timetable, setTimetable] = useState<DaySchedule[]>(() => getCachedTimetable());
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [employees, setEmployees] = useState<string[]>(() => getCachedEmployees());
 
   // Edit Roster Modal
   const [editingDay, setEditingDay] = useState<DaySchedule | null>(null);
@@ -21,6 +22,12 @@ export const TimetableTab: React.FC = () => {
   useEffect(() => {
     loadRoster();
     loadStaffList();
+    const handleRefreshed = () => {
+      setTimetable(getCachedTimetable());
+      setEmployees(getCachedEmployees());
+    };
+    window.addEventListener('westside_vapes_data_refreshed', handleRefreshed);
+    return () => window.removeEventListener('westside_vapes_data_refreshed', handleRefreshed);
   }, []);
 
   const loadStaffList = async () => {
@@ -33,7 +40,10 @@ export const TimetableTab: React.FC = () => {
   };
 
   const loadRoster = async () => {
-    setLoading(true);
+    const cached = getCachedTimetable();
+    setTimetable(cached);
+
+    setIsRefreshing(true);
     try {
       const res = await fetchTimetable();
       setTimetable(res.timetable);
@@ -41,6 +51,7 @@ export const TimetableTab: React.FC = () => {
       console.error('Failed to fetch timetable:', err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -92,11 +103,11 @@ export const TimetableTab: React.FC = () => {
 
         <button
           onClick={loadRoster}
-          disabled={loading}
+          disabled={loading || isRefreshing}
           className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all active:scale-95"
           title="Refresh Schedule"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isRefreshing || loading ? 'animate-spin text-emerald-400' : ''}`} />
         </button>
       </div>
 

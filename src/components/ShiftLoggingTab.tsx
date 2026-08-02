@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Sun, Moon, CheckCircle, RefreshCw, AlertCircle, ShieldAlert } from 'lucide-react';
 import { SHOP_INFO, getTodayDateString, calculateShiftHours } from '../config';
-import { fetchEmployees, submitShiftApi } from '../services/api';
+import { fetchEmployees, submitShiftApi, getCachedEmployees } from '../services/api';
 import { ShiftRecord } from '../types';
 import { ConflictModal } from './ConflictModal';
 
@@ -12,10 +12,12 @@ interface ShiftLoggingTabProps {
 export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmittedSuccess }) => {
   const todayStr = getTodayDateString();
 
+  const cachedList = getCachedEmployees();
+
   // Form states
-  const [employees, setEmployees] = useState<string[]>([]);
-  const [loadingEmp, setLoadingEmp] = useState<boolean>(true);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [employees, setEmployees] = useState<string[]>(cachedList);
+  const [loadingEmp, setLoadingEmp] = useState<boolean>(cachedList.length === 0);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>(cachedList[0] || '');
   const [shiftDate, setShiftDate] = useState<string>(todayStr);
   const [shiftType, setShiftType] = useState<'Morning' | 'Evening'>('Morning');
   const [inTime, setInTime] = useState<string>(SHOP_INFO.morningShift.defaultIn);
@@ -40,14 +42,23 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
   // Load employees on mount
   useEffect(() => {
     loadStaffList();
+    const handleRefreshed = () => {
+      const fresh = getCachedEmployees();
+      setEmployees(fresh);
+      if (fresh.length > 0 && !selectedEmployee) {
+        setSelectedEmployee(fresh[0]);
+      }
+    };
+    window.addEventListener('westside_vapes_data_refreshed', handleRefreshed);
+    return () => window.removeEventListener('westside_vapes_data_refreshed', handleRefreshed);
   }, []);
 
   const loadStaffList = async () => {
-    setLoadingEmp(true);
+    if (employees.length === 0) setLoadingEmp(true);
     try {
       const res = await fetchEmployees();
       setEmployees(res.employees);
-      if (res.employees.length > 0) {
+      if (res.employees.length > 0 && !selectedEmployee) {
         setSelectedEmployee(res.employees[0]);
       }
     } catch (err) {

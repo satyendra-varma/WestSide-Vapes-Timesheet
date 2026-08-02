@@ -54,7 +54,55 @@ function formatTimeString(val: any): string {
   return String(val);
 }
 
-// Helper: Local storage cache
+// Helper: Local storage caches for employees, timetable, and timesheets
+export function getCachedEmployees(): string[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY_EMPLOYEES);
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn('Failed to get cached employees:', e);
+  }
+  return INITIAL_EMPLOYEES;
+}
+
+export function saveCachedEmployees(employees: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_EMPLOYEES, JSON.stringify(employees));
+  } catch (e) {
+    console.warn('Failed to save cached employees:', e);
+  }
+}
+
+export function getCachedTimetable(): DaySchedule[] {
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  try {
+    const data = localStorage.getItem(STORAGE_KEY_TIMETABLE);
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length === 7) return parsed;
+    }
+  } catch (e) {
+    console.warn('Failed to get cached timetable:', e);
+  }
+  return daysOfWeek.map((dayName) => ({
+    dayName,
+    dateStr: '',
+    morning: [{ employeeName: '' }],
+    evening: [{ employeeName: '' }],
+  }));
+}
+
+export function saveCachedTimetable(timetable: DaySchedule[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_TIMETABLE, JSON.stringify(timetable));
+  } catch (e) {
+    console.warn('Failed to save cached timetable:', e);
+  }
+}
+
 function getCachedTimesheets(): ShiftRecord[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY_TIMESHEETS);
@@ -72,11 +120,18 @@ function saveCachedTimesheets(records: ShiftRecord[]): void {
   }
 }
 
+export function getCachedTimesheet(month: number, year: number): ShiftRecord[] {
+  const all = getCachedTimesheets();
+  const monthPadded = String(month).padStart(2, '0');
+  const monthPrefix = `${year}-${monthPadded}`;
+  return all.filter((r) => r.date && r.date.startsWith(monthPrefix));
+}
+
 // 1. Fetch Employees list from Google Sheets (Employees tab)
 export async function fetchEmployees(): Promise<{ employees: string[]; isMock: boolean }> {
   const scriptUrl = getSavedScriptUrl();
   if (isSampleUrl(scriptUrl)) {
-    return { employees: INITIAL_EMPLOYEES, isMock: true };
+    return { employees: getCachedEmployees(), isMock: true };
   }
 
   try {
@@ -84,17 +139,21 @@ export async function fetchEmployees(): Promise<{ employees: string[]; isMock: b
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     
+    let cleaned: string[] = [];
     if (Array.isArray(data)) {
-      const cleaned = data.map(e => String(e).trim()).filter(Boolean);
-      return { employees: cleaned.length > 0 ? cleaned : INITIAL_EMPLOYEES, isMock: false };
+      cleaned = data.map(e => String(e).trim()).filter(Boolean);
     } else if (data.employees && Array.isArray(data.employees)) {
-      const cleaned = data.employees.map((e: any) => String(e).trim()).filter(Boolean);
-      return { employees: cleaned.length > 0 ? cleaned : INITIAL_EMPLOYEES, isMock: false };
+      cleaned = data.employees.map((e: any) => String(e).trim()).filter(Boolean);
     }
-    return { employees: INITIAL_EMPLOYEES, isMock: false };
+
+    if (cleaned.length > 0) {
+      saveCachedEmployees(cleaned);
+      return { employees: cleaned, isMock: false };
+    }
+    return { employees: getCachedEmployees(), isMock: false };
   } catch (err) {
     console.warn('Google Apps Script employee fetch failed, using default list:', err);
-    return { employees: INITIAL_EMPLOYEES, isMock: false };
+    return { employees: getCachedEmployees(), isMock: false };
   }
 }
 
@@ -103,13 +162,10 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
   const scriptUrl = getSavedScriptUrl();
   const monthPadded = String(month).padStart(2, '0');
   const monthYear = `${monthPadded}-${year}`; // e.g., "08-2026"
+  const monthPrefix = `${year}-${monthPadded}`;
 
   if (isSampleUrl(scriptUrl)) {
-    const all = getCachedTimesheets();
-    const filtered = all.filter(r => {
-      const d = new Date(r.date + 'T00:00:00');
-      return d.getMonth() + 1 === month && d.getFullYear() === year;
-    });
+    const filtered = getCachedTimesheet(month, year);
     return { records: filtered, isMock: true };
   }
 
@@ -137,7 +193,7 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
         const morningName = row[1] ? String(row[1]).trim() : '';
         if (morningName && morningName.toLowerCase() !== 'name' && morningName.toLowerCase() !== 'employee name') {
           const inTime = formatTimeString(row[2]) || '09:00';
-          const outTime = formatTimeString(row[3]) || '15:30';
+          const outTime = formatTimeString(row[3]) || '16:00';
           records.push({
             id: `shift_${dateStr}_Morning`,
             employeeName: morningName,
@@ -153,8 +209,8 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
         // Evening Shift: Col F (5), Col G (6), Col H (7)
         const eveningName = row[5] ? String(row[5]).trim() : '';
         if (eveningName && eveningName.toLowerCase() !== 'name' && eveningName.toLowerCase() !== 'employee name') {
-          const inTime = formatTimeString(row[6]) || '15:30';
-          const outTime = formatTimeString(row[7]) || '22:00';
+          const inTime = formatTimeString(row[6]) || '16:00';
+          const outTime = formatTimeString(row[7]) || '23:00';
           records.push({
             id: `shift_${dateStr}_Evening`,
             employeeName: eveningName,
@@ -169,15 +225,13 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
       }
     }
 
-    saveCachedTimesheets(records);
+    const allCached = getCachedTimesheets();
+    const remainingCached = allCached.filter(r => !r.date.startsWith(monthPrefix));
+    saveCachedTimesheets([...records, ...remainingCached]);
     return { records, isMock: false };
   } catch (err) {
     console.warn('Google Apps Script timesheet fetch failed, using cached dataset:', err);
-    const all = getCachedTimesheets();
-    const filtered = all.filter(r => {
-      const d = new Date(r.date + 'T00:00:00');
-      return d.getMonth() + 1 === month && d.getFullYear() === year;
-    });
+    const filtered = getCachedTimesheet(month, year);
     return { records: filtered, isMock: true };
   }
 }
@@ -188,13 +242,7 @@ export async function fetchTimetable(): Promise<{ timetable: DaySchedule[]; isMo
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   if (isSampleUrl(scriptUrl)) {
-    const timetable = daysOfWeek.map((dayName) => ({
-      dayName,
-      dateStr: '',
-      morning: [{ employeeName: '' }],
-      evening: [{ employeeName: '' }],
-    }));
-    return { timetable, isMock: true };
+    return { timetable: getCachedTimetable(), isMock: true };
   }
 
   try {
@@ -229,16 +277,11 @@ export async function fetchTimetable(): Promise<{ timetable: DaySchedule[]; isMo
       };
     });
 
+    saveCachedTimetable(timetable);
     return { timetable, isMock: false };
   } catch (err) {
     console.warn('Google Apps Script timetable fetch failed:', err);
-    const timetable = daysOfWeek.map((dayName) => ({
-      dayName,
-      dateStr: '',
-      morning: [{ employeeName: '' }],
-      evening: [{ employeeName: '' }],
-    }));
-    return { timetable, isMock: true };
+    return { timetable: getCachedTimetable(), isMock: true };
   }
 }
 
