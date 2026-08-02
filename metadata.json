@@ -1,0 +1,6 @@
+{
+  "name": "WestSide Vapes Timesheet",
+  "description": "Mobile-first employee shift logging, monthly timesheets, and timetable schedule board with Google Apps Script support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
