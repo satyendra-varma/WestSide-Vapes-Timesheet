@@ -42,7 +42,7 @@ Script web app. The app holds data in memory only, for the length of a session.
 
 | Path | Purpose |
 |---|---|
-| `apps-script/src/*.js` | **Backend source**, concatenated in filename order. Shared global scope like Apps Script. `00_config` constants · `01_util` pure helpers · `02_services` Apps Script wrappers · `03_audit` · `04_employees` · `05_auth` · `06_timesheet` · `07_timetable` · `08_staff` · `90_api` router · `95_setup` owner-run functions. |
+| `apps-script/src/*.js` | **Backend source**, concatenated in filename order. Shared global scope like Apps Script. `00_config` constants · `01_util` pure helpers · `02_services` Apps Script wrappers · `03_audit` · `04_employees` · `05_auth` · `06_timesheet` · `07_timetable` · `08_staff` · `09_month_formulas` minute columns + `migrateSheets` · `90_api` router · `95_setup` owner-run functions. |
 | `apps-script/Code.gs` | **Generated** single file the owner pastes into Apps Script (`npm run build:gas`). `tests/backend/bundle.test.ts` fails if it's stale. |
 | `scripts/build-apps-script.ts` | Bundler (`build:gas`, `check:gas`). |
 | `mock-backend/fakeGoogle.ts` | In-memory SpreadsheetApp, PropertiesService, LockService, Utilities, ContentService, MailApp, ScriptApp, and a controllable clock. |
@@ -78,15 +78,25 @@ give 0 and the shift is flagged for review). One record per date+shift slot.
 ## Sheet layout
 
 ### Month tabs `MM-YYYY`, copied from `Template` on the first write of a month
-| Row | A | B | C | D | E | F | G | H | I |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Date | Morning | | | | Evening | | | |
-| 2 | | Employee Name | In | Out | Hours | Employee Name | In | Out | Hours |
-| 3…33 | day 1…31 | name | in | out | hours | name | in | out | hours |
+| Row | A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Date | Morning | | | | Evening | | | | | | | All staff | 1–15 min | 16–end min | month min | h:mm |
+| 2 | | Employee Name | In | Out | Hours | Employee Name | In | Out | Hours | Morning Min | Evening Min | | Employee | 1-15 min | 16-end min | Month min | Month h:mm |
+| 3…33 | day 1…31 | name | in | out | hours | name | in | out | hours | minutes | minutes | | per-employee totals (array formulas from row 3) | | | | |
 
+- Columns A–I are the original layout and never move. J–Q (Phase 1B) are additive. L is left empty as a
+  spacer.
 - Row = day + 2. Rows past the month's last day are ignored.
-- On every write, A gets `MM/DD/YYYY`. In/Out are written as `HH:mm`; Phase 1B moves them to plain text.
-- Hours (E, I) are the owner's formulas; the app never reads or writes them.
+- On every write, A gets `MM/DD/YYYY`. In/Out are written as **plain text** `HH:mm` (number format `@`
+  set first). Older rows may hold time values; reads handle both.
+- **J/K** = integer minutes per shift:
+  `=IF(OR(C3="",D3=""),"",IFERROR(MOD(ROUND((TIMEVALUE(TEXT(D3,"HH:mm"))-TIMEVALUE(TEXT(C3,"HH:mm")))*1440),1440),"CHECK"))`.
+  Past-midnight safe; `CHECK` means a time can't be read.
+- **M–Q** = totals that SUM minutes and show h:mm; no decimal hours anywhere.
+  - Row 1 = all staff (N 1–15, O 16–end, P month, Q h:mm).
+  - Rows 3+ = one row per employee who appears that month (`FLATTEN/UNIQUE/SUMIF` array formulas
+    anchored in M3:Q3).
+- Hours (E, I) are the owner's own formulas; the app never reads or writes them (D-035).
 - New month tabs get warning-only protection.
 - Reads accept time values (Dates), day-fraction numbers, `HH:mm[:ss]` and `h:mm AM/PM` text.
   Anything else is returned as-is and flagged.
@@ -174,12 +184,21 @@ script.
   the last used column if they're missing. Existing columns aren't moved. Blank Active = active,
   blank Role = staff.
 - **Audit tab:** new, created on the first audited event.
-- **Month tabs:** unchanged in 1A (same columns as v1).
+- **Month tabs (Phase 1B):**
+  - New tabs get J/K/M–Q automatically on creation. Existing tabs and the Template get them when the
+    owner runs `migrateSheets()` once.
+  - Additive only: A–I are never changed.
+  - A tab is skipped, untouched, if any target cell (J2:K33, M1:Q33) already holds something;
+    the log names the first such cell.
+  - Re-running is harmless.
+  - The Template's empty In/Out cells (C3:D33, G3:H33) are set to plain text so manual entries stay
+    text too. Existing tabs keep their formats; only cells the app writes become text.
+  - If the owner's Hours formulas in E/I can't handle text times (they show `#VALUE!` on new rows),
+    use J/K, or wrap their references in `TIMEVALUE()`.
 - **Browser:** v1's localStorage caches (`westside_vapes_*`) are deleted on first load of v2.
 - **Legacy standalone HTML export:** removed (couldn't authenticate; its request format was already
   broken).
 
 ## Known gaps (tracked in PLAN.md)
-- Phase 1B: plain-text In/Out, minute columns + summary in the sheet.
 - Phase 3: CI on GitHub, strict TypeScript, unused-dependency cleanup.
 - Phase 5: offline queue (a network error now means "not saved, try again"), PWA, in-app confirm dialogs.

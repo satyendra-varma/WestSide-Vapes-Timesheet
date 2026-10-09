@@ -18,6 +18,7 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/backend/bundle.test.ts` | `Code.gs` = concatenated `src/*.js`; no hardcoded PIN or secret |
 | `tests/backend/auth.test.ts` | login, generic errors, lockout + expiry + unlock, token tamper/expiry/foreign secret/revocation, active flag on every request, roles, no data without token, PIN rules, setup function, no PIN/token stored anywhere |
 | `tests/backend/timesheet.test.ts` | save, conflict, force rules (staff vs manager), validation, inactive employees, audit, read formats, delete, timetable |
+| `tests/backend/hardening.test.ts` | plain-text In/Out, legacy Date reads, exact formula strings (integer minutes, no decimal hours), columns on new tabs, `migrateSheets` additive/idempotent/skip-on-conflict |
 | `tests/apiClient.test.ts` | real client ↔ real backend: transport (text/plain, token only in body), v1-backend refusal, network errors, conflicts, validation fields, unauthorized hook |
 | `tests/session.test.ts` | session only in sessionStorage, expiry, legacy purge, cache clearing, frontend/backend time-parsing parity |
 
@@ -69,6 +70,10 @@ See `MORNING_CHECKLIST.md` step 4. Additionally:
 - [ ] The `Audit` tab gets rows for logins, PIN sets and shift changes, and never shows a PIN.
 - [ ] `Employees` gained `Role` / `Active` columns at the end; nothing else moved.
 - [ ] Opening a future month in the Timesheet doesn't create a tab.
+- [ ] After `migrateSheets`: J/K minutes per row (overnight shift, e.g. 16:00–00:30 = 510); M–Q per
+      employee; N1+O1 = P1; Q shows h:mm. Totals equal the app's Hours by Employee.
+- [ ] A row the app writes has In/Out as plain text (left-aligned, `09:00`); old rows still show times.
+- [ ] Re-running `migrateSheets` reports `present` and changes nothing.
 
 ## Earlier evidence
 - **Phase 0 (2026-10-09):** 15 × 6h 20m showed 94.5 h in the old app vs the correct 95h 0m. The browser

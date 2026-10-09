@@ -3,6 +3,25 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 1B complete (backend hardening)
+- **Current phase:** 1B → merged into `dev`; next is Phase 3 (tests + CI).
+- **Done:**
+  - In/Out stored as plain text.
+  - Additive minute columns J/K and minute totals M–Q (`09_month_formulas.js`), added to new month tabs
+    automatically.
+  - Owner-run `migrateSheets()` for the Template and existing tabs: additive, idempotent, skips
+    occupied tabs.
+  - 8 new tests (89 total). Docs: PROJECT layout + migration note, MORNING_CHECKLIST steps 4–5, QA
+    staging checks, D-035.
+- **Next step:** Phase 3 on `phase/3-tests-ci`:
+  - GitHub Actions CI (install, typecheck, build, test on push/PR to any branch; no deploy changes);
+  - `strict: true` in tsconfig with fixes, no `any`;
+  - remove unused dependencies;
+  - `npm ci` in CI.
+- **Known problems:**
+  - The sheet formulas are verified only as strings; the owner must check them on the staging copy.
+  - The owner's own E/I formulas may not accept text times (documented).
+
 ## 2026-10-09: Phase 1A complete (authentication)
 - **Current phase:** 1A → merged into `dev`; next is 1B (backend hardening).
 - **Done:**

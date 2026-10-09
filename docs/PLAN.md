@@ -46,14 +46,20 @@ export used a broken contract.
 - [ ] **(owner)** Sheet backup, staging test, new deployment, manager PIN, staff PINs (MORNING_CHECKLIST)
 
 ## Phase 1B: Backend hardening (`phase/1b-backend-hardening`)
-- [ ] IN/OUT written as plain text `HH:mm` (format `@`); reads handle strings, numbers and Dates
-      (`Utilities.formatDate`)
-- [ ] Integer-minute duration columns by formula (overnight-safe) + per-employee/period summary that sums
-      minutes and shows h:mm; no rounded decimals; additive columns only + migration note
-- [ ] Server-side conflict detection inside the lock; `forceOverwrite` honoured on confirmed retry
-- [ ] Validation: monthYear, date valid for month (and not in the future), shift enum, HH:mm, employee
-      exists and is active
-- [ ] **(owner)** Run `migrateSheets` once; verify formulas on a copy first
+Audit (2026-10-09): conflict detection inside the lock, `forceOverwrite`, and validation (month, date,
+shift, HH:mm, active employee) already landed with 1A. Missing: text storage and minute columns.
+- [x] IN/OUT written as plain text `HH:mm` (format `@`); reads handle text, numbers and Dates
+      (`Utilities.formatDate`, spreadsheet time zone: D-027)
+- [x] Integer-minute duration columns J/K by formula (past-midnight safe) + per-employee/half-month/month
+      totals M–Q that sum minutes and show h:mm; no decimal hours; additive + migration note (D-035)
+- [x] `migrateSheets()` owner function: additive, idempotent, skips occupied tabs; new month tabs get
+      the columns on creation
+- [x] Server-side conflict detection inside the lock; `forceOverwrite` honoured (done in 1A, retested)
+- [x] Validation: monthYear, real date not in the future, shift enum, HH:mm, not zero-length, employee
+      exists and is active (done in 1A)
+- [x] Tests: `tests/backend/hardening.test.ts` (89 tests total)
+- [ ] **(owner)** Run `migrateSheets` on the staging copy, verify the formulas, then on the real sheet
+      (MORNING_CHECKLIST steps 4–5)
 
 ## Phase 3: Tests + CI (`phase/3-tests-ci`)
 - [ ] Vitest across hours, auth, validation, conflict, API client against the mock backend
