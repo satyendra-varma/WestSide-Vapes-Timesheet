@@ -385,3 +385,21 @@ type-checked. Adding them early produced no errors. Strict mode itself stays in 
 - At most 50 entries.
 - This is the one exception to "no data in localStorage": it's needed to avoid losing hours worked.
 
+## D-040: PWA service worker caches only same-origin static files
+*2026-10-09 · Accepted · Phase 5*
+
+`public/sw.js` returns early (doesn't call `respondWith`) for:
+- any non-GET request; all API calls, including customer requests, are POST;
+- any other origin (Apps Script, the mock backend, anything external);
+- anything API-like (`/exec`, `?action=`) as a second net;
+- paths outside the app's scope.
+
+Within scope:
+- Hashed `assets/`, `icons/` and the manifest are cache-first.
+- Page navigations are network-first, so a new deploy is picked up; the cached shell is only an
+  offline fallback.
+
+There's no data in any cache (verified in a production build: only the shell, JS and CSS were cached
+after logging in and loading a month). It's registered only in production builds. Icons are generated
+by `scripts/make-icons.ts` (no image library), and a test checks the committed PNGs match it.
+

@@ -20,8 +20,14 @@ Current phase / Done / Next step / Known problems.
   - 10 queue tests.
   - Browser-verified against the mock backend (queue, warn, reconnect, send, shows in Timesheet).
   - D-039.
-- **Next step:** 5c PWA (manifest, icons, service worker for same-origin static assets only + tests);
-  5d manager audit viewer.
+- **Done (5c):** installable PWA.
+  - Manifest, generated icons (192/512/maskable/apple), theme meta tags.
+  - `public/sw.js` caches same-origin static files only (D-040).
+  - 15 tests run the real `sw.js` in a vm with fake caches/fetch to prove API, POST, cross-origin and
+    customer traffic are never touched.
+  - Verified in a production build (`vite build --mode mock` + `vite preview`): service worker in
+    control; the cache held only `/`, the JS and the CSS.
+- **Next step:** 5d manager audit viewer (`getAudit` action + Settings section).
 - **Known problems:** none new.
 
 ## 2026-10-09: Phase 4 complete (data completeness)
