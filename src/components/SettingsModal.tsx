@@ -8,6 +8,7 @@ import { Modal } from './Modal';
 import { useConfirm } from './ConfirmDialog';
 import { useShiftQueue } from '../offline/useShiftQueue';
 import { StaffManager } from './StaffManager';
+import { AuditLog } from './AuditLog';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -72,6 +73,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     >
       <div id="settings-modal-card" className="space-y-5">
         <StaffManager />
+
+        <AuditLog />
 
         {/* Server address (this device only) */}
         <div className="space-y-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4">

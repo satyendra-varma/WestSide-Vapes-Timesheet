@@ -3,31 +3,21 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
-## 2026-10-09: Phase 5 in progress (reliability + polish)
-- **Current phase:** 5 on `phase/5-reliability-polish` (not merged yet).
-- **Done (5a):**
-  - In-app `ConfirmDialog` replaces every `window.confirm` (delete shift, deactivate, server switch).
-  - Accessibility pass: 44 px targets on period buttons, search, filter and month inputs;
-    `aria-pressed` / `aria-current` / labels.
-  - `text-slate-500` → `text-slate-400` for WCAG AA contrast.
-  - Offline pill in the header.
-- **Done (5b):** offline queue for new shift logs (`src/offline/`).
-  - Queued on network/busy errors.
-  - Auto-sent on login, when back online, and every 30 s; Send now; Discard with confirm.
-  - Failed items show their reason.
-  - Header "N unsent" pill; logout warns before deleting unsent items; server switch blocked while
-    items are pending.
-  - 10 queue tests.
-  - Browser-verified against the mock backend (queue, warn, reconnect, send, shows in Timesheet).
-  - D-039.
-- **Done (5c):** installable PWA.
-  - Manifest, generated icons (192/512/maskable/apple), theme meta tags.
-  - `public/sw.js` caches same-origin static files only (D-040).
-  - 15 tests run the real `sw.js` in a vm with fake caches/fetch to prove API, POST, cross-origin and
-    customer traffic are never touched.
-  - Verified in a production build (`vite build --mode mock` + `vite preview`): service worker in
-    control; the cache held only `/`, the JS and the CSS.
-- **Next step:** 5d manager audit viewer (`getAudit` action + Settings section).
+## 2026-10-09: Phase 5 complete (reliability + polish)
+- **Current phase:** 5 → merged into `dev`; next is Phase 6 (stock list + customer requests).
+- **Done:**
+  - 5a: confirm dialogs, accessibility pass, offline pill.
+  - 5b: offline queue for new shift logs (D-039).
+  - 5c: PWA with a static-only service worker (D-040), verified in a production build.
+  - 5d: manager audit viewer (`getAudit`).
+  - 172 tests; MORNING_CHECKLIST step 8 (install on the shop device).
+- **Next step:** Phase 6 on `phase/6-stock-requests`:
+  - Stock tab (product, low|out, noted by, date, resolved).
+  - Customer requests (name, phone validated, product, status, privacy line, tel: links, grouped by
+    product, autocomplete).
+  - Manager-only delete / purge period / export.
+  - React-state-only customer data; audit without names or phones.
+  - Time-driven purge with an `installTriggers()` owner function.
 - **Known problems:** none new.
 
 ## 2026-10-09: Phase 4 complete (data completeness)
