@@ -16,7 +16,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
   ];
 
   return (
-    <nav id="bottom-navigation-bar" className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 py-2 px-4 shadow-2xl">
+    <nav id="bottom-navigation-bar" aria-label="Main" className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 py-2 px-4 shadow-2xl">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -26,7 +26,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
               key={tab.id}
               id={`nav-tab-${tab.id}`}
               onClick={() => onTabChange(tab.id)}
-              className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all duration-200 active:scale-95 ${
+              aria-current={isActive ? 'page' : undefined}
+              className={`min-h-11 flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all duration-200 active:scale-95 ${
                 isActive
                   ? 'text-emerald-400 font-extrabold'
                   : 'text-slate-400 hover:text-slate-200 font-medium'

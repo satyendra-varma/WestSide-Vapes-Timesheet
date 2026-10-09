@@ -1,7 +1,8 @@
 import React from 'react';
-import { LogOut, Settings, Zap } from 'lucide-react';
+import { LogOut, Settings, WifiOff, Zap } from 'lucide-react';
 import { SHOP_INFO } from '../config';
 import { useAuth } from '../auth/AuthContext';
+import { useOnline } from '../hooks/useOnline';
 
 interface HeaderProps {
   onOpenSettings: () => void;
@@ -9,6 +10,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
   const { user, isManager, logout } = useAuth();
+  const online = useOnline();
 
   return (
     <header id="app-header" className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 shadow-xl">
@@ -35,6 +37,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {!online && (
+            <span role="status" className="flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold bg-amber-500/15 text-amber-300 border-amber-500/40">
+              <WifiOff className="w-3 h-3" aria-hidden="true" /> Offline
+            </span>
+          )}
           {isManager && (
             <button
               id="open-settings-btn"

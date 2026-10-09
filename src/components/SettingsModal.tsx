@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { getApiUrlOverride, getDefaultApiUrl, setApiUrlOverride } from '../config';
 import { APPS_SCRIPT_CODE_GS } from '../utils/appsScriptTemplate';
 import { Modal } from './Modal';
+import { useConfirm } from './ConfirmDialog';
 import { StaffManager } from './StaffManager';
 
 interface SettingsModalProps {
@@ -15,6 +16,7 @@ interface SettingsModalProps {
 /** Manager-only (App.tsx doesn't render it for staff; the server enforces roles regardless). */
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { logout } = useAuth();
+  const confirm = useConfirm();
   const [scriptUrl, setScriptUrl] = useState<string>(getApiUrlOverride());
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
   const [testingUrl, setTestingUrl] = useState<boolean>(false);
@@ -37,10 +39,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   };
 
-  const handleSaveUrl = () => {
+  const handleSaveUrl = async () => {
     const next = scriptUrl.trim();
     if (next === getApiUrlOverride()) return;
-    if (!confirm('Switching servers logs you out on this device. Continue?')) return;
+    const ok = await confirm({ title: 'Switch server?', message: 'Switching servers logs you out on this device.', confirmLabel: 'Switch & log out' });
+    if (!ok) return;
     setApiUrlOverride(next || null);
     logout();
   };
@@ -89,7 +92,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </p>
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={handleSaveUrl} className="flex-1 min-h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs">
+            <button type="button" onClick={() => void handleSaveUrl()} className="flex-1 min-h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs">
               Save & log out
             </button>
             <button type="button" onClick={() => void handleTestConnection()} disabled={testingUrl} className="min-h-11 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5">

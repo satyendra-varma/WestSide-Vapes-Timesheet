@@ -7,6 +7,7 @@ import { TimetableTab } from './components/TimetableTab';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ConfirmProvider } from './components/ConfirmDialog';
 import { purgeLegacyStorage } from './auth/session';
 import { SHOP_INFO } from './config';
 
@@ -18,7 +19,9 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <Gate />
+      <ConfirmProvider>
+        <Gate />
+      </ConfirmProvider>
     </AuthProvider>
   );
 }

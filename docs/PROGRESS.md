@@ -3,6 +3,17 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 5 in progress (reliability + polish)
+- **Current phase:** 5 on `phase/5-reliability-polish` (not merged yet).
+- **Done (5a):**
+  - In-app `ConfirmDialog` replaces every `window.confirm` (delete shift, deactivate, server switch).
+  - Accessibility pass: 44 px targets on period buttons, search, filter and month inputs;
+    `aria-pressed` / `aria-current` / labels.
+  - `text-slate-500` → `text-slate-400` for WCAG AA contrast.
+  - Offline pill in the header.
+- **Next step:** 5b offline queue for shift logs; 5c PWA; 5d manager audit viewer.
+- **Known problems:** none new.
+
 ## 2026-10-09: Phase 4 complete (data completeness)
 - **Current phase:** 4 → merged into `dev`; next is Phase 5 (reliability + polish).
 - **Done:**
