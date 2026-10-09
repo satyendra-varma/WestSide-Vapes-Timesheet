@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Search, Filter, Clock, Edit2, Trash2, Check, X, RefreshCw, Users, Copy, AlertTriangle, WifiOff } from 'lucide-react';
-import { fetchTimesheet, updateShiftApi, deleteShiftApi, getCachedTimesheet, getCachedEmployees } from '../services/api';
+import React, { useState } from 'react';
+import { Calendar, Search, Filter, Clock, Edit2, Trash2, Check, RefreshCw, Users, Copy, AlertTriangle, WifiOff } from 'lucide-react';
 import { ShiftRecord } from '../types';
 import { SHOP_INFO } from '../config';
+import { ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { toMonthYear, useEmployees, useTimesheet } from '../data/hooks';
 import { formatDecimalHours, formatDuration, needsReview, shiftMinutes, totalMinutes, totalsByEmployee } from '../utils/hours';
 import { PayPeriod, daysInMonth as getDaysInMonth, periodDayRange, recordsInPeriod } from '../utils/periods';
+import { Modal } from './Modal';
 
-interface MonthlyTimesheetTabProps {
-  refreshTrigger: number;
-}
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refreshTrigger }) => {
+export const MonthlyTimesheetTab: React.FC = () => {
+  const { user, isManager, api } = useAuth();
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -18,17 +20,11 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
   const [period, setPeriod] = useState<PayPeriod>('full');
   const [filterEmployee, setFilterEmployee] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-
-  const [records, setRecords] = useState<ShiftRecord[]>(() => {
-    const [year, month] = currentMonthStr.split('-').map(Number);
-    return getCachedTimesheet(month, year);
-  });
-  const [loading, setLoading] = useState<boolean>(false);
-  const [loadFailed, setLoadFailed] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
-  // Ignore responses for a month the user has already navigated away from
-  const latestMonth = useRef(selectedMonth);
-  latestMonth.current = selectedMonth;
+
+  const timesheet = useTimesheet(toMonthYear(selectedMonth));
+  const employees = useEmployees();
+  const records: ShiftRecord[] = timesheet.data ?? [];
 
   // Edit Modal State
   const [editingRecord, setEditingRecord] = useState<ShiftRecord | null>(null);
@@ -40,38 +36,9 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
 
   // Delete State
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadMonthlyData();
-    const handleRefreshed = () => {
-      const [year, month] = selectedMonth.split('-').map(Number);
-      setRecords(getCachedTimesheet(month, year));
-    };
-    window.addEventListener('westside_vapes_data_refreshed', handleRefreshed);
-    return () => window.removeEventListener('westside_vapes_data_refreshed', handleRefreshed);
-  }, [selectedMonth, refreshTrigger]);
-
-  const loadMonthlyData = async () => {
-    const requestedMonth = selectedMonth;
-    const [year, month] = requestedMonth.split('-').map(Number);
-    const cached = getCachedTimesheet(month, year);
-    setRecords(cached);
-
-    if (cached.length === 0) {
-      setLoading(true);
-    }
-
-    try {
-      const res = await fetchTimesheet(month, year);
-      if (latestMonth.current !== requestedMonth) return;
-      setRecords(res.records);
-      setLoadFailed(!!res.failed);
-    } catch (err) {
-      console.error('Failed to load monthly sheet:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const canEdit = (r: ShiftRecord) => isManager || (!!user && sameName(r.employeeName, user.name));
 
   // Pay period (semi-monthly: 1-15 and 16-end of month)
   const [year, month] = selectedMonth.split('-').map(Number);
@@ -139,49 +106,47 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
   };
 
   const editMinutes = shiftMinutes(editInTime, editOutTime);
-  const editEmployeeOptions = Array.from(new Set([...getCachedEmployees(), editEmployee].filter(Boolean)));
+  const editEmployeeOptions = Array.from(new Set([
+    ...(employees.data ?? []).filter((e) => e.active).map((e) => e.name),
+    editEmployee,
+  ].filter(Boolean)));
 
-  // Save Edit
+  const errorText = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback);
+
+  // Save Edit: the user is editing this exact slot, so the save replaces it (forceOverwrite).
   const handleSaveEdit = async () => {
-    if (!editingRecord) return;
+    if (!editingRecord || !api) return;
     setIsUpdating(true);
     setEditError(null);
-    const updated: ShiftRecord = {
-      ...editingRecord,
-      employeeName: editEmployee,
-      inTime: editInTime,
-      outTime: editOutTime,
-    };
-
     try {
-      const result = await updateShiftApi(updated);
-      if (!result.success) {
-        setEditError(result.message || 'Shift was not saved.');
-        return;
-      }
+      await api.saveShift({
+        date: editingRecord.date,
+        shift: editingRecord.shift,
+        name: editEmployee,
+        inTime: editInTime,
+        outTime: editOutTime,
+        forceOverwrite: true,
+      });
       setEditingRecord(null);
-      loadMonthlyData();
+      await timesheet.reload();
     } catch (err) {
-      console.error('Failed to update shift:', err);
+      if (!(err instanceof ApiError && err.code === 'unauthorized')) setEditError(`Not saved. ${errorText(err, 'Please try again.')}`);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Delete Shift
-  const handleDeleteShift = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this shift entry?')) return;
-    setDeletingId(id);
+  // Delete Shift (manager only; the server enforces this too)
+  const handleDeleteShift = async (record: ShiftRecord) => {
+    if (!api) return;
+    if (!confirm(`Delete ${record.employeeName}'s ${record.shift} shift on ${record.date}?`)) return;
+    setDeletingId(record.id);
+    setActionError(null);
     try {
-      const record = records.find(r => r.id === id);
-      const result = await deleteShiftApi(id, record);
-      if (!result.success) {
-        alert(result.message || 'Shift was not deleted.');
-        return;
-      }
-      loadMonthlyData();
+      await api.deleteShift(record.date, record.shift);
+      await timesheet.reload();
     } catch (err) {
-      console.error('Failed to delete shift:', err);
+      if (!(err instanceof ApiError && err.code === 'unauthorized')) setActionError(`Not deleted. ${errorText(err, 'Please try again.')}`);
     } finally {
       setDeletingId(null);
     }
@@ -190,11 +155,15 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
   return (
     <section id="tab-monthly-container" className="space-y-5 animate-in fade-in duration-300">
 
-      {loadFailed && (
-        <div className="p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 bg-amber-500/15 text-amber-300 border-amber-500/40">
-          <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>Couldn't reach Google Sheets. Showing the last saved copy, so totals may be out of date.</span>
+      {timesheet.error && (
+        <div role="alert" className="p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 bg-amber-500/15 text-amber-300 border-amber-500/40">
+          <WifiOff className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
+          <span className="flex-1">Couldn't load this month. {timesheet.error.message}</span>
+          <button type="button" onClick={() => void timesheet.reload()} className="min-h-11 px-3 rounded-xl bg-slate-800 text-slate-200">Retry</button>
         </div>
+      )}
+      {actionError && (
+        <p role="alert" className="p-3.5 rounded-2xl border text-xs font-bold bg-rose-500/15 text-rose-300 border-rose-500/40">{actionError}</p>
       )}
 
       {/* Month & Filter Controls */}
@@ -359,7 +328,7 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
 
       {/* Record List */}
       <div className="space-y-3">
-        {loading ? (
+        {timesheet.loading && records.length === 0 ? (
           <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center text-slate-400 flex flex-col items-center gap-3">
             <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
             <p className="text-xs font-semibold">Loading monthly timesheets...</p>
@@ -428,25 +397,29 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
                 )}
 
                 <div className="flex items-center gap-1">
+                  {canEdit(record) && (
                   <button
                     onClick={() => openEditModal(record)}
-                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all active:scale-95"
-                    title="Edit shift"
+                    className="w-11 h-11 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all active:scale-95"
+                    aria-label={`Edit ${record.employeeName}'s ${record.shift} shift on ${record.date}`}
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Edit2 className="w-4 h-4" />
                   </button>
+                  )}
+                  {isManager && (
                   <button
-                    onClick={() => handleDeleteShift(record.id)}
+                    onClick={() => void handleDeleteShift(record)}
                     disabled={deletingId === record.id}
-                    className="w-8 h-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 flex items-center justify-center transition-all active:scale-95 disabled:opacity-50"
-                    title="Delete shift"
+                    className="w-11 h-11 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 flex items-center justify-center transition-all active:scale-95 disabled:opacity-50"
+                    aria-label={`Delete ${record.employeeName}'s ${record.shift} shift on ${record.date}`}
                   >
                     {deletingId === record.id ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     )}
                   </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -457,93 +430,87 @@ export const MonthlyTimesheetTab: React.FC<MonthlyTimesheetTabProps> = ({ refres
 
       {/* Inline Edit Modal */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="font-extrabold text-base text-white flex items-center gap-2">
-                  <Edit2 className="w-4 h-4 text-cyan-400" />
-                  Edit Past Shift Log
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">{editingRecord.date} · {editingRecord.shift} Shift</p>
-              </div>
-              <button
-                onClick={() => setEditingRecord(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Employee Name</label>
+        <Modal
+          title={<><Edit2 className="w-4 h-4 text-cyan-400" aria-hidden="true" />Edit Shift</>}
+          onClose={() => setEditingRecord(null)}
+          initialFocusId="edit-in-time"
+        >
+          <p className="text-xs text-slate-400 -mt-3">{editingRecord.date} · {editingRecord.shift} Shift</p>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="edit-employee" className="block text-xs font-bold uppercase text-slate-400 mb-1">Employee Name</label>
+              {isManager ? (
                 <select
+                  id="edit-employee"
                   value={editEmployee}
                   onChange={(e) => setEditEmployee(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold focus:outline-none focus:border-cyan-500"
                 >
                   {editEmployeeOptions.map((emp) => (
-                    <option key={emp} value={emp}>
-                      {emp}
-                    </option>
+                    <option key={emp} value={emp}>{emp}</option>
                   ))}
                 </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">In Time</label>
-                  <input
-                    type="time"
-                    value={editInTime}
-                    onChange={(e) => setEditInTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Out Time</label>
-                  <input
-                    type="time"
-                    value={editOutTime}
-                    onChange={(e) => setEditOutTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Duration:</span>
-                <span className={`font-black ${editMinutes === 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
-                  {editMinutes === 0 ? 'Check times' : `${formatDuration(editMinutes)} · ${formatDecimalHours(editMinutes)} h`}
-                </span>
-              </div>
-
-              {editError && (
-                <p className="text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/40 rounded-xl px-3 py-2">
-                  {editError}
-                </p>
+              ) : (
+                <p id="edit-employee" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold">{editEmployee}</p>
               )}
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setEditingRecord(null)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={isUpdating || editMinutes === 0 || !editEmployee}
-                className="flex-1 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg disabled:opacity-50"
-              >
-                {isUpdating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                Save Changes
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="edit-in-time" className="block text-xs font-bold uppercase text-slate-400 mb-1">In Time</label>
+                <input
+                  id="edit-in-time"
+                  type="time"
+                  value={editInTime}
+                  onChange={(e) => setEditInTime(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-out-time" className="block text-xs font-bold uppercase text-slate-400 mb-1">Out Time</label>
+                <input
+                  id="edit-out-time"
+                  type="time"
+                  value={editOutTime}
+                  onChange={(e) => setEditOutTime(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm font-bold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
             </div>
+
+            <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 flex items-center justify-between text-xs" aria-live="polite">
+              <span className="text-slate-400 font-medium">Duration:</span>
+              <span className={`font-black ${editMinutes === 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                {editMinutes === 0 ? 'Check times' : `${formatDuration(editMinutes)} · ${formatDecimalHours(editMinutes)} h`}
+              </span>
+            </div>
+
+            {editError && (
+              <p role="alert" className="text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/40 rounded-xl px-3 py-2">
+                {editError}
+              </p>
+            )}
           </div>
-        </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setEditingRecord(null)}
+              className="flex-1 min-h-12 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveEdit()}
+              disabled={isUpdating || editMinutes === 0 || !editEmployee || !api}
+              className="flex-1 min-h-12 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg disabled:opacity-50"
+            >
+              {isUpdating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Save Changes
+            </button>
+          </div>
+        </Modal>
       )}
 
     </section>

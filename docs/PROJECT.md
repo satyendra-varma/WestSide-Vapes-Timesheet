@@ -1,183 +1,185 @@
 # Project reference
 
-Describes the code on `dev`; it's updated as phases merge. `main` is the live site and lags behind
-until the owner merges. See `PROGRESS.md` for status.
+Describes the code on `dev` (updated as phases merge). `main` is the live site and runs the old v1 app
+until the owner merges; see `PROGRESS.md` for status.
 
 ## What it is
-A mobile-first web app for staff at WestSide Vapes, Kerrisdale:
-- **Log Shift:** an employee records date, Morning/Evening shift, in and out time.
-- **Timesheet:** month view with pay periods (full month, 1–15, 16–end), hours per employee, edit/delete.
-- **Timetable:** weekly roster (one person per Morning/Evening slot, Sunday–Saturday).
+A mobile-first web app for WestSide Vapes (Kerrisdale) staff:
+- **Log Shift:** staff log their own shifts; the manager can log for anyone.
+- **Timesheet:** month view, pay periods (full / 1–15 / 16–end), hours per employee, edit/delete.
+- **Timetable:** weekly roster (one person per Morning/Evening slot); the manager edits it.
+- **Manager Settings:** staff PINs, unlocks, activate/deactivate, server address, backend code.
 
-There is no server or database of our own. The Google Sheet is the system of record; the browser keeps a
-localStorage cache.
+There's no server or database of our own. The Google Sheet is the system of record, behind an Apps
+Script web app. The app holds data in memory only, for the length of a session.
 
 ## Architecture
 
 ```
- Browser (React SPA on GitHub Pages)
-   │  localStorage cache: employees, timetable, timesheet records, script URL
+ Browser: React SPA on GitHub Pages (static)
+   │  sessionStorage: session token only        localStorage: nothing (except a manager's server override)
+   │  in-memory cache: employees / timesheet months / roster, wiped on logout or expiry
    │
-   │  GET  ?action=…                      (JSON response)
-   │  POST body=JSON, Content-Type text/plain (no CORS preflight)
+   │  GET  (no params)        -> {apiVersion: 2}        version check only, returns no data
+   │  POST {action, token, …} as text/plain (no CORS preflight; token never in the URL)
    ▼
- Google Apps Script web app  (apps-script/Code.gs, "Execute as: Me", "Anyone")
-   │  doGet  → read tabs
-   │  doPost → write shift / clear shift / write roster   (script lock, 10 s)
+ Apps Script web app (apps-script/Code.gs, generated from apps-script/src/*.js)
+   │  login -> PIN check -> HMAC-signed token
+   │  every other action -> verify token + employee active + token version + role
+   │  writes under the script lock; every change appended to the Audit tab
    ▼
- Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable
+ Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable · Audit
+ Script Properties: TOKEN_SECRET · PIN_PEPPER · auth.user.<name> (salt, hash, failures, lock, token version)
 ```
 
-- Stack: React 19, TypeScript 5.8, Vite 6, Tailwind CSS v4 (`@tailwindcss/vite`), lucide-react icons.
-- Hosting: `.github/workflows/deploy.yml` runs on every push to `main`: `npm install`, `npm run build`,
-  publish `dist/` to GitHub Pages. Vite `base` is `/WestSide-Vapes-Timesheet/`.
+- Stack: React 19, TypeScript 5.8, Vite 6, Tailwind CSS v4, lucide-react, Vitest 3.
+- Hosting: `.github/workflows/deploy.yml` deploys `main` to GitHub Pages (base `/WestSide-Vapes-Timesheet/`).
+  Claude never touches `main` or that workflow.
 - Unused dependencies left over from the AI Studio template: `@google/genai`, `express`, `dotenv`,
-  `motion`, `@types/express` (removal planned in Phase 3).
+  `motion`, `@types/express` (Phase 3).
 
 ## File map
 
 | Path | Purpose |
 |---|---|
-| `apps-script/Code.gs` | Backend. Pasted into the Sheet's Apps Script editor by hand. Also bundled into the app (`?raw` import) for Settings → Copy Backend Script. |
-| `src/main.tsx` | React entry. |
-| `src/App.tsx` | Shell: header, tab state, settings modal. On load, fetches employees, timetable and the current month in parallel, then fires the `westside_vapes_data_refreshed` window event. |
-| `src/config.ts` | `DEFAULT_APPS_SCRIPT_URL` (live deployment, public), `SHOP_INFO` (name, default shift times 09:00–16:00 / 16:00–23:00), `INITIAL_EMPLOYEES` fallback list, `getTodayDateString`. |
-| `src/types.ts` | `ShiftRecord`, `DaySchedule` (+ unused `ConflictCheckPayload`, `AppsScriptResponse`). |
-| `src/services/api.ts` | Every backend call, response handling, sheet-row parsing, localStorage caches. |
-| `src/utils/hours.ts` | **Only** place hours are computed: integer minutes, formatting, per-employee totals, review flag. Tests: `hours.test.ts`. |
-| `src/utils/periods.ts` | Semi-monthly pay periods (1–15, 16–end). Tests: `periods.test.ts`. |
-| `src/utils/appsScriptTemplate.ts` | `?raw` re-export of `apps-script/Code.gs` for Settings → Copy; drift test in `appsScriptTemplate.test.ts`. |
-| `vitest.config.ts` | Test runner config (`npm test`). |
-| `src/utils/githubPagesExport.ts` | Legacy single-file HTML generator (Settings → Download). Out of date; see Known gaps. |
-| `src/vite-env.d.ts` | Vite client types (needed for the `?raw` import). |
-| `src/components/Header.tsx` | Brand, Live/Demo pill, settings button. |
-| `src/components/BottomNav.tsx` | Tabs: Log Shift / Timesheet / Timetable. |
-| `src/components/ShiftLoggingTab.tsx` | Shift form, validation, conflict flow. |
-| `src/components/ConflictModal.tsx` | Existing vs new shift, side by side; Overwrite / Cancel. |
-| `src/components/MonthlyTimesheetTab.tsx` | Month picker, pay periods, stats, Hours by Employee + Copy, shift list, edit modal, delete. |
-| `src/components/TimetableTab.tsx` | Weekly roster view and per-day edit. |
-| `src/components/SettingsModal.tsx` | Script URL (saved in localStorage), Test URL, Copy Code.gs, legacy HTML download. |
-| `.github/workflows/deploy.yml` | Build + deploy to GitHub Pages on push to `main`. |
-| `.claude/launch.json` | Local dev-server config for Claude's preview browser (untracked). |
+| `apps-script/src/*.js` | **Backend source**, concatenated in filename order. Shared global scope like Apps Script. `00_config` constants · `01_util` pure helpers · `02_services` Apps Script wrappers · `03_audit` · `04_employees` · `05_auth` · `06_timesheet` · `07_timetable` · `08_staff` · `90_api` router · `95_setup` owner-run functions. |
+| `apps-script/Code.gs` | **Generated** single file the owner pastes into Apps Script (`npm run build:gas`). `tests/backend/bundle.test.ts` fails if it's stale. |
+| `scripts/build-apps-script.ts` | Bundler (`build:gas`, `check:gas`). |
+| `mock-backend/fakeGoogle.ts` | In-memory SpreadsheetApp, PropertiesService, LockService, Utilities, ContentService, MailApp, ScriptApp, and a controllable clock. |
+| `mock-backend/loadBackend.ts` | Runs the real `Code.gs` in a Node `vm` sandbox with those fakes. |
+| `mock-backend/seed.ts` | Fake sheet, employees, random PINs; helpers for tests. Fake names only. |
+| `mock-backend/server.ts` | `npm run mock`: HTTP mock backend on :8787 for end-to-end testing (`npm run dev:mock`). |
+| `src/config.ts` | `SHOP_INFO`, `API_VERSION`, `APPS_SCRIPT_URL` (empty on dev; set at merge), env/override lookup. |
+| `src/api/client.ts` | Transport: POST text/plain, typed `ApiError`, version check, unauthorized hook. |
+| `src/api/backend.ts` | Typed wrappers per action; `createBackendApi(token)`. |
+| `src/api/types.ts` | Contract types. |
+| `src/auth/session.ts` | Session in sessionStorage; purge of v1 localStorage caches. |
+| `src/auth/AuthContext.tsx` | Login/logout, expiry timer, re-login overlay state, bound API. |
+| `src/data/store.ts`, `src/data/hooks.ts` | In-memory cache + `useResource`; employees/timesheet/roster hooks. |
+| `src/utils/hours.ts` | **Only** place hours are computed (integer minutes). |
+| `src/utils/periods.ts` | Semi-monthly pay periods. |
+| `src/utils/appsScriptTemplate.ts` | `?raw` re-export of `apps-script/Code.gs` for Settings → Copy. |
+| `src/components/LoginScreen.tsx` | Login page and the "session expired" overlay. |
+| `src/components/Modal.tsx` | Accessible dialog (focus trap, Escape, focus restore). |
+| `src/components/{ShiftLoggingTab,MonthlyTimesheetTab,TimetableTab,ConflictModal,Header,BottomNav}.tsx` | Screens. |
+| `src/components/{SettingsModal,StaffManager}.tsx` | Manager-only settings and staff/PIN management. |
+| `tests/**`, `src/**/*.test.ts` | Vitest suites (`npm test`). |
+| `.env.mock` | `VITE_APPS_SCRIPT_URL=http://localhost:8787/exec` for `npm run dev:mock` (not a secret). |
 
 ## Data model (frontend)
 
 ```ts
 ShiftRecord { id: "shift_YYYY-MM-DD_Morning|Evening", employeeName, date: "YYYY-MM-DD",
-              shift: "Morning"|"Evening", inTime: "HH:mm", outTime: "HH:mm", submittedAt, notes? }
-DaySchedule { dayName: "Sunday"…, dateStr: "", morning: [{employeeName}], evening: [{employeeName}] }
+              shift: "Morning"|"Evening", inTime: "HH:mm", outTime: "HH:mm" }
 ```
-- No stored hours. Minutes always come from `shiftMinutes(inTime, outTime)`: an out time earlier than
-  the in time counts as past midnight; missing, invalid or equal times give 0 minutes and the shift is
-  flagged for review.
-- One record per date+shift slot; the slot is the identity (that's how the sheet stores it).
-
-localStorage keys: `westside_vapes_script_url`, `westside_vapes_timesheets_data` (all months, flat),
-`westside_vapes_timetable_data`, `westside_vapes_employees_data`.
-
-**Demo mode:** the saved URL is empty or contains `your-apps-script-url`. All reads and writes then go
-to localStorage only. A saved URL containing `SAMPLE_WESTSIDE_VAPES` is replaced by the live default URL,
-so it can't be used for demo mode.
+Minutes always come from `shiftMinutes(inTime, outTime)` (overnight-safe; missing, invalid or equal times
+give 0 and the shift is flagged for review). One record per date+shift slot.
 
 ## Sheet layout
 
-### Month tabs: `MM-YYYY` (e.g. `10-2026`), copied from `Template`
-Confirmed against the live `10-2026` tab on 2026-10-09:
-
+### Month tabs `MM-YYYY`, copied from `Template` on the first write of a month
 | Row | A | B | C | D | E | F | G | H | I |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | Date | Morning | | | | Evening | | | |
 | 2 | | Employee Name | In | Out | Hours | Employee Name | In | Out | Hours |
 | 3…33 | day 1…31 | name | in | out | hours | name | in | out | hours |
 
-- **Row = day + 2.** The app maps rows by position and ignores column A's value.
-- On every write, column A gets the string `MM/DD/YYYY`; the sheet's locale may convert it to a date.
-- In/Out cells are set to number format `HH:mm` on write.
-- **Hours (E, I) are sheet formulas the owner controls; the app never reads or writes them.** Exact
-  minute columns arrive in Phase 1B (D-021).
-- Month tabs created by the script get warning-only protection.
-- Rows past the month's last day are ignored.
+- Row = day + 2. Rows past the month's last day are ignored.
+- On every write, A gets `MM/DD/YYYY`. In/Out are written as `HH:mm`; Phase 1B moves them to plain text.
+- Hours (E, I) are the owner's formulas; the app never reads or writes them.
+- New month tabs get warning-only protection.
+- Reads accept time values (Dates), day-fraction numbers, `HH:mm[:ss]` and `h:mm AM/PM` text.
+  Anything else is returned as-is and flagged.
 
 ### `Employees`
-Column A, header in row 1, one name per row from row 2. Read by `getEmployees`. `addEmployee(name)` in
-Code.gs appends a row, but the app doesn't call it. (Layout inferred from the code, not inspected live.)
+- Row 1 is a header; column A holds names from row 2.
+- Optional columns are found by their row-1 header (case-insensitive) and appended only when needed:
+  - **Active**: blank or anything except `FALSE/no/0/inactive` means active.
+  - **Role**: `manager` or anything else (staff).
+  - **Email**: Phase 8.
+- Duplicate names: the first row wins. Rename = new person (needs a new PIN).
 
 ### `Timetable`
-Column A = day name (`Sunday`…`Saturday`, matched case-insensitively), B = Morning employee,
-C = Evening employee. Any other rows and columns are ignored. (Inferred from the code.)
+A = day name (case-insensitive), B = Morning employee, C = Evening employee. Other cells untouched.
 
-## Apps Script contract (`apps-script/Code.gs`)
+### `Audit` (created automatically)
+Timestamp | Actor | Action | Target | Details. Actions:
+- Auth: `login.success`, `login.failed`, `login.blocked`, `login.locked`
+- Staff: `pin.set`, `employee.unlock`, `employee.activate`, `employee.deactivate`
+- Data: `shift.create`, `shift.update`, `shift.delete`, `timetable.update`
+- Setup: `setup.managerPin`
 
-### GET
-| Request | Response |
-|---|---|
-| `?action=getEmployees` | `["Name", …]`: non-empty values of `Employees!A2:A`; `[]` if the tab is missing |
-| `?action=getTimesheet&monthYear=MM-YYYY` | 2-D array of **display strings** for the whole tab (`getDisplayValues`); `[]` if the tab doesn't exist (**no tab is created**) |
-| `?action=getTimetable` | 2-D array of raw values (`getValues`); `[]` if the tab is missing |
-| anything else / bad `monthYear` | `{status:"error", message}` |
+Never contains PINs, tokens or customer data. User-supplied text is written with a leading apostrophe
+if it starts with `= + - @` (formula-injection guard).
 
-### POST (JSON body sent as `text/plain;charset=utf-8`)
-Every POST waits up to 10 s for the script lock; on timeout it returns
-`{status:"error", message:"Server busy, please try again in a moment."}`.
+### Script Properties (Project Settings → Script properties)
+- `TOKEN_SECRET` and `PIN_PEPPER`: random, created on first use.
+- `auth.user.<lower-case name>`: `{salt, hash, failed, lockedUntil, tv}`.
+- `SETUP_MANAGER_NAME` / `SETUP_MANAGER_PIN`: temporary, deleted by `setManagerPin`.
 
-**Save shift:** `{monthYear:"MM-YYYY", date:1-31, shift:"Morning"|"Evening", name, inTime:"HH:mm", outTime:"HH:mm", force:bool}`
-- Validation: `monthYear` must be `01-12`-`YYYY`; `date` must exist in that month; `shift` must be
-  Morning or Evening; when `name` is set, both times must parse (`H:mm`, `HH:mm[:ss]`, `h:mm AM/PM`).
-- If the slot has different data and `force` isn't true: `{status:"conflict", previousData:{name,inTime,outTime}}`.
-  Nothing is written.
-- Otherwise it writes (creating the month tab from `Template` if needed) and returns
-  `{status:"success", previousData}`.
+Anyone with edit access to the Sheet or script can bypass auth (D-018).
 
-**Delete shift:** the same payload with `name`, `inTime` and `outTime` set to `""` and `force:true`.
+## Apps Script contract (v2, `API_VERSION = 2`)
 
-**Update roster:** `{action:"updateTimetable", timetable:[{dayName, morning:[{employeeName}], evening:[{employeeName}]}…]}`
-- Writes B/C on each matching day row, appends missing days, and ignores names that aren't days.
-- Creates the `Timetable` tab (header `Day | Morning | Evening`) if it's missing. Returns `{status:"success"}`.
+All responses include `apiVersion: 2` and one of:
+`{status:"success", data}` · `{status:"error", code, message, field?, retryAfterMinutes?}` ·
+`{status:"conflict", code:"conflict", message, previousData:{name,inTime,outTime}}`.
 
-Errors: `{status:"error", message}`. **The frontend treats any status other than `success` or `conflict`
-as a failure and tells the user the change was NOT saved.**
+Error codes: `unauthorized` (bad, expired or revoked token: the app shows re-login) · `forbidden` (role)
+· `invalid` (+`field`) · `invalid_credentials` · `locked` (+`retryAfterMinutes`) · `not_found` · `busy`
+(lock timeout) · `server_error`.
 
-### Client conflict flow
-1. `submitShiftApi` first compares against the local cache; a mismatch opens the conflict modal with no
-   network call.
-2. Otherwise it POSTs with `force:false`. A server `conflict` also opens the modal.
-3. Overwrite resends with `force:true`. Edits and deletes from the Timesheet tab always send `force:true`.
+| Action | Who | Params | Data |
+|---|---|---|---|
+| `login` | anyone | `name`, `pin` | `{token, expiresAt, user:{name, role}}` |
+| `getEmployees` | staff: active names; manager: all + `hasPin`, `lockedUntil` | – | `[{name, role, active, …}]` |
+| `getTimesheet` | any | `monthYear` `MM-YYYY` | `{monthYear, records:[{date, shift, name, inTime, outTime}]}` (`[]` if no tab; never creates one) |
+| `saveShift` | staff: own name only; manager: anyone | `date` `YYYY-MM-DD`, `shift`, `name`, `inTime`, `outTime`, `forceOverwrite?` | `{previousData}` or `conflict` |
+| `deleteShift` | manager | `date`, `shift` | `{previousData}` |
+| `getTimetable` | any | – | `[{dayName, morning, evening}]` × 7 |
+| `updateTimetable` | manager | `timetable:[{dayName, morning, evening}]` | updated timetable |
+| `setPin` | manager | `name`, `pin` | `{name}`. Resets lockout and ends that person's sessions. |
+| `unlockEmployee` | manager | `name` | `{name}` |
+| `setEmployeeActive` | manager (not self) | `name`, `active` | `{name, active}`. Deactivation ends sessions. |
 
-### Compatibility with the pre-Phase-0 backend
-The frontend still works if the old script is deployed:
-- Times come back as ISO strings; the client parses them.
-- `getTimesheet` creates missing month tabs.
-- `force` is ignored, so there are no server-side conflicts.
-- `updateTimetable` doesn't exist: roster saves fail with an error, and the old script leaves a
-  stray "Copy of Template" tab.
+**saveShift rules** (inside the script lock):
+- `date` must be a real date, not in the future (spreadsheet time zone); `shift` Morning or Evening;
+  times `HH:mm` and not equal; `name` an existing, active employee.
+- Occupied slot with different data and no `forceOverwrite:true` → `conflict`, nothing written.
+- Staff can only overwrite their own slot; replacing someone else's needs the manager.
 
-## Redeploy
+**Auth** (D-018):
+- PIN hash = HMAC-SHA256(PIN_PEPPER, salt + ":" + pin).
+- Token = `encodeURIComponent(JSON{n, r, v, iat, exp})` + "." + hex HMAC-SHA256(TOKEN_SECRET, payload).
+- Staff tokens last 8 h, manager 2 h.
+- 5 wrong PINs lock that employee for 15 min.
+- Wrong PIN, unknown name, inactive and no-PIN all give the same `invalid_credentials`.
+- Weak PINs (one repeated digit, straight runs) are rejected.
 
-### Frontend
-1. Merge the PR into `main`.
-2. The GitHub Action "Deploy React App to GitHub Pages" builds and publishes. The expected URL is
-   https://satyendra-varma.github.io/WestSide-Vapes-Timesheet/ (check repo Settings → Pages).
+## Redeploy / rollout (owner)
+Full step-by-step in `MORNING_CHECKLIST.md`. Summary:
+1. Back up the Sheet.
+2. Test on a staging copy first.
+3. In the real Sheet's Apps Script, paste `apps-script/Code.gs`, then **Deploy → New deployment**. This
+   gives a NEW URL; the old deployment keeps serving the live v1 app.
+4. Run `setManagerPin` once, then set staff PINs from the app.
+5. When merging `dev` → `main`, set `APPS_SCRIPT_URL` in `src/config.ts` to the NEW URL.
+6. After the live site works, archive the old deployment.
 
-### Backend (Apps Script)
-1. Open the Google Sheet → **Extensions → Apps Script**.
-2. Replace `Code.gs` with `apps-script/Code.gs` (or copy it from app Settings → Copy Backend Script),
-   then save.
-3. **Deploy → Manage deployments** → pencil on the existing deployment → **Version: New version** → Deploy.
-   The URL stays the same.
-   - If you use *New deployment* instead, the URL changes. Then update `DEFAULT_APPS_SCRIPT_URL` in
-     `src/config.ts` (and any URL saved on devices via Settings).
-   - Settings: Execute as **Me**, Who has access **Anyone**.
-4. Run the post-deploy checks in `QA.md`.
+The v2 app refuses any URL that doesn't report `apiVersion: 2`, so it can never send requests to the v1
+script.
 
-The frontend and backend can be deployed in either order (see Compatibility above).
+## Migration notes
+- **Employees:** `setManagerPin` (and later deactivation) appends `Role` / `Active` header columns after
+  the last used column if they're missing. Existing columns aren't moved. Blank Active = active,
+  blank Role = staff.
+- **Audit tab:** new, created on the first audited event.
+- **Month tabs:** unchanged in 1A (same columns as v1).
+- **Browser:** v1's localStorage caches (`westside_vapes_*`) are deleted on first load of v2.
+- **Legacy standalone HTML export:** removed (couldn't authenticate; its request format was already
+  broken).
 
 ## Known gaps (tracked in PLAN.md)
-- Write endpoints are unauthenticated and the URL is public (repo and bundle): anyone can change
-  timesheets.
-- Names aren't checked against `Employees`; a value starting with `=` would be written as a formula.
-- `githubPagesExport.ts` posts `{action:"submitShift", employeeName, date:"YYYY-MM-DD", …}`, which neither
-  backend understands, so its saves fail. Its monthly view reads only its own localStorage.
-- The header pill says "Live" in demo mode.
-- `@types/react` isn't installed, so React code is effectively untyped (fixed in Phase 3).
-- CI doesn't run tests yet (Phase 3).
-- Employee-name variants (case or extra spaces inside the name) count as separate people.
+- Phase 1B: plain-text In/Out, minute columns + summary in the sheet.
+- Phase 3: CI on GitHub, strict TypeScript, unused-dependency cleanup.
+- Phase 5: offline queue (a network error now means "not saved, try again"), PWA, in-app confirm dialogs.

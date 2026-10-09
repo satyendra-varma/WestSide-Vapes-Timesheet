@@ -20,27 +20,30 @@ cut from `dev` and merged back into `dev` when it's green. `main` is never touch
 - [ ] **(owner)** Verify real totals against a copy of the sheet (MORNING_CHECKLIST)
 
 ## Phase 1A: Authentication (`phase/1a-auth`)
-- [ ] Backend split into `apps-script/src/*.js`; `Code.gs` generated (`npm run build:gas`) + drift test
-- [ ] Node test harness: fake SpreadsheetApp/PropertiesService/LockService/Utilities/ContentService
-- [ ] All actions are POST `{action, token, …}` (text/plain); `doGet` only reports `apiVersion`
-- [ ] `login` (name + 6-digit PIN) is the only unauthenticated action
-- [ ] PINs stored as salted + peppered hashes in Script Properties; never in the Sheet, repo or logs
-- [ ] One-time `setManagerPin` (reads temporary Script Properties, then deletes them); manager-only
-      `setPin`
-- [ ] HMAC-SHA256 signed token {name, role, version, exp}; secret in Script Properties; constant-time
+Audit (2026-10-09): every v1 endpoint was open and the URL was public; the frontend prefetched and cached
+all data in localStorage; Settings let anyone change the URL and copy the backend; the standalone HTML
+export used a broken contract.
+- [x] Backend split into `apps-script/src/*.js`; `Code.gs` generated (`npm run build:gas`) + drift test
+- [x] Node test harness: fake SpreadsheetApp/PropertiesService/LockService/Utilities/ContentService (D-025)
+- [x] All actions are POST `{action, token, …}` (text/plain); `doGet` only reports `apiVersion` (D-026)
+- [x] `login` (name + 6-digit PIN) is the only unauthenticated action
+- [x] PINs stored as salted + peppered hashes in Script Properties; never in the Sheet, repo or logs
+- [x] One-time `setManagerPin` (temporary Script Properties, always deleted); manager-only `setPin`
+- [x] HMAC-SHA256 signed token {name, role, version, exp}; secret in Script Properties; constant-time
       compare; staff 8 h, manager 2 h
-- [ ] Roles manager/staff; active flag + token version checked on every request
-- [ ] Lockout: 5 failures → 15 min; manager unlock; auth events in the Audit sheet (no PINs/tokens)
-- [ ] Manager-only: Settings, Code.gs export, URL editor, roster edits, PIN set/reset/unlock,
-      (de)activate
-- [ ] Frontend: login gate; no data fetch or storage before login; logout/expiry wipes cached data;
+- [x] Roles manager/staff; active flag + token version checked on every request
+- [x] Lockout: 5 failures → 15 min; manager unlock; auth events in the Audit sheet (no PINs/tokens)
+- [x] Manager-only: Settings, Code.gs export, URL editor, roster edits, PIN set/reset/unlock,
+      (de)activate, delete shift
+- [x] Frontend: login gate; no data fetch or storage before login; logout/expiry wipes cached data;
       expired-token re-login without losing unsaved forms
-- [ ] Remove the legacy standalone HTML export (can't authenticate; contract already broken)
-- [ ] Mock backend server running the real `Code.gs` for end-to-end testing; fake demo names only
-- [ ] Tests: sign/verify, expiry, tampering, lockout, roles, deactivated users, no data without a token
-- [ ] Rollout documented: NEW deployment + NEW URL; config URL changes only at merge; old deployment
-      disabled after
-- [ ] **(owner)** Sheet backup, new deployment, manager PIN setup, staff PINs (MORNING_CHECKLIST)
+- [x] Removed the legacy standalone HTML export (D-031)
+- [x] Mock backend server running the real `Code.gs` (`npm run mock`, `npm run dev:mock`); fake names
+- [x] Tests: sign/verify, expiry, tampering, lockout, roles, deactivated users, no data without a token
+      (81 tests total)
+- [x] Rollout documented: NEW deployment + NEW URL; config URL set only at merge; old deployment
+      archived after (MORNING_CHECKLIST steps 4–6)
+- [ ] **(owner)** Sheet backup, staging test, new deployment, manager PIN, staff PINs (MORNING_CHECKLIST)
 
 ## Phase 1B: Backend hardening (`phase/1b-backend-hardening`)
 - [ ] IN/OUT written as plain text `HH:mm` (format `@`); reads handle strings, numbers and Dates
@@ -56,7 +59,7 @@ cut from `dev` and merged back into `dev` when it's green. `main` is never touch
 - [ ] Vitest across hours, auth, validation, conflict, API client against the mock backend
 - [ ] Strict TypeScript; no `any` in new code
 - [ ] GitHub Actions: on push + PR to any branch: install, typecheck, build, test (no deploy changes)
-- [ ] Lockfile committed, CI uses `npm ci`
+- [ ] Lockfile committed (done in Phase 0), CI uses `npm ci`
 - [ ] **(owner)** Wire deploy-on-main yourself if wanted; optionally protect `main`
 
 ## Phase 2: Payroll views, no money (`phase/2-payroll-views`)

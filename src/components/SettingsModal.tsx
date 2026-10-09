@@ -1,220 +1,126 @@
 import React, { useState } from 'react';
-import { Settings, Copy, Check, Download, Globe, Wifi, FileCode, X, ExternalLink, HelpCircle } from 'lucide-react';
-import { getSavedScriptUrl, saveScriptUrl } from '../services/api';
+import { Settings, Copy, Check, Globe, Wifi, FileCode } from 'lucide-react';
+import { checkBackend, ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { getApiUrlOverride, getDefaultApiUrl, setApiUrlOverride } from '../config';
 import { APPS_SCRIPT_CODE_GS } from '../utils/appsScriptTemplate';
-import { generateGitHubPagesIndexHtml } from '../utils/githubPagesExport';
+import { Modal } from './Modal';
+import { StaffManager } from './StaffManager';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUrlUpdated: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onUrlUpdated }) => {
-  const [scriptUrl, setScriptUrl] = useState<string>(getSavedScriptUrl());
+/** Manager-only (App.tsx doesn't render it for staff; the server enforces roles regardless). */
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  const { logout } = useAuth();
+  const [scriptUrl, setScriptUrl] = useState<string>(getApiUrlOverride());
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
   const [testingUrl, setTestingUrl] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSaveUrl = () => {
-    saveScriptUrl(scriptUrl);
-    onUrlUpdated();
-    setTestResult({ success: true, message: 'Google Apps Script URL saved successfully!' });
-    setTimeout(() => setTestResult(null), 3000);
-  };
+  const defaultUrl = getDefaultApiUrl();
 
   const handleTestConnection = async () => {
     setTestingUrl(true);
     setTestResult(null);
     try {
-      if (!scriptUrl || scriptUrl.includes('SAMPLE_WESTSIDE_VAPES')) {
-        setTestResult({
-          success: false,
-          message: 'Sample URL detected. Currently running in local offline demo mode.',
-        });
-        return;
-      }
-      const res = await fetch(`${scriptUrl}?action=getEmployees`);
-      if (res.ok) {
-        setTestResult({ success: true, message: 'Successfully connected to Google Apps Script Web App!' });
-      } else {
-        setTestResult({ success: false, message: `HTTP Error ${res.status}. Verify deployment permissions.` });
-      }
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: 'Connection failed. Ensure "Who has access" is set to "Anyone" in Web App deployment.',
-      });
+      await checkBackend(scriptUrl.trim() || defaultUrl);
+      setTestResult({ success: true, message: 'Connected: this is the v2 WestSide backend.' });
+    } catch (err) {
+      setTestResult({ success: false, message: err instanceof ApiError ? err.message : 'Connection failed.' });
     } finally {
       setTestingUrl(false);
     }
   };
 
-  const handleCopyCodeGs = () => {
-    navigator.clipboard.writeText(APPS_SCRIPT_CODE_GS);
-    setCopiedScript(true);
-    setTimeout(() => setCopiedScript(false), 3000);
+  const handleSaveUrl = () => {
+    const next = scriptUrl.trim();
+    if (next === getApiUrlOverride()) return;
+    if (!confirm('Switching servers logs you out on this device. Continue?')) return;
+    setApiUrlOverride(next || null);
+    logout();
   };
 
-  const handleDownloadGitHubPagesHtml = () => {
-    const htmlContent = generateGitHubPagesIndexHtml(scriptUrl);
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'index.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleCopyCodeGs = async () => {
+    try {
+      await navigator.clipboard.writeText(APPS_SCRIPT_CODE_GS);
+      setCopiedScript(true);
+      setTimeout(() => setCopiedScript(false), 3000);
+    } catch {
+      setTestResult({ success: false, message: "Couldn't copy to the clipboard." });
+    }
   };
 
   return (
-    <div id="settings-modal-overlay" className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div id="settings-modal-card" className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
-              <Settings className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-lg text-white">App & API Configuration</h3>
-              <p className="text-xs text-slate-400">Google Apps Script & GitHub Pages setup</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Modal
+      title={<><Settings className="w-5 h-5 text-cyan-400" aria-hidden="true" />Manager Settings</>}
+      onClose={onClose}
+      className="max-w-lg"
+    >
+      <div id="settings-modal-card" className="space-y-5">
+        <StaffManager />
 
-        {/* 1. Deployed Google Apps Script URL */}
+        {/* Server address (this device only) */}
         <div className="space-y-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-emerald-400" />
-              Apps Script Web App URL
-            </label>
-            <span className="text-[10px] text-slate-500 font-semibold">GET & POST Endpoint</span>
-          </div>
-
+          <label htmlFor="apps-script-url-input" className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <Globe className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            Server address (this device)
+          </label>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Leave empty to use the app's built-in server{defaultUrl ? '' : ' (none is configured in this build)'}. Only set this to test a staging copy of the sheet.
+          </p>
           <input
             type="url"
             id="apps-script-url-input"
             value={scriptUrl}
             onChange={(e) => setScriptUrl(e.target.value)}
-            placeholder="https://script.google.com/macros/s/.../exec"
+            placeholder={defaultUrl || 'https://script.google.com/macros/s/.../exec'}
             className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 text-white font-mono text-xs rounded-xl px-3.5 py-3 focus:outline-none"
           />
-
           {testResult && (
-            <div
-              className={`p-3 rounded-xl text-xs font-bold ${
-                testResult.success
-                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-              }`}
-            >
+            <p role={testResult.success ? 'status' : 'alert'} className={`p-3 rounded-xl text-xs font-bold ${
+              testResult.success ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+            }`}>
               {testResult.message}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleSaveUrl}
-              className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all"
-            >
-              Save URL
-            </button>
-            <button
-              onClick={handleTestConnection}
-              disabled={testingUrl}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5"
-            >
-              <Wifi className="w-3.5 h-3.5 text-cyan-400" />
-              {testingUrl ? 'Testing...' : 'Test URL'}
-            </button>
-          </div>
-        </div>
-
-        {/* 2. Google Apps Script Code.gs Exporter */}
-        <div className="space-y-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <FileCode className="w-4 h-4 text-amber-400" />
-              Google Sheets Backend (Code.gs)
-            </h4>
-          </div>
-
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Need to set up your Google Sheet? Copy this Google Apps Script code and paste it into Google Sheets &gt; Extensions &gt; Apps Script.
-          </p>
-
-          <div className="space-y-2 text-[11px] text-slate-400 font-medium">
-            <p className="flex items-center gap-1 text-emerald-400 font-bold">
-              Deployment Instructions:
             </p>
-            <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-1">
-              <li>In Google Sheets, go to <b>Extensions &gt; Apps Script</b>.</li>
-              <li>Replace existing code with copied snippet and click Save.</li>
-              <li>Updating? <b>Deploy &gt; Manage deployments</b>, edit, Version: <b>New version</b>, Deploy. The URL stays the same.</li>
-              <li>First time? <b>Deploy &gt; New deployment</b>, select <b>Web app</b>, Execute as: <b>Me</b>, Who has access: <b>Anyone</b>.</li>
-              <li>Copy the Web App URL and paste above!</li>
-            </ol>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={handleSaveUrl} className="flex-1 min-h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs">
+              Save & log out
+            </button>
+            <button type="button" onClick={() => void handleTestConnection()} disabled={testingUrl} className="min-h-11 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5">
+              <Wifi className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+              {testingUrl ? 'Testing…' : 'Test'}
+            </button>
           </div>
-
-          <button
-            onClick={handleCopyCodeGs}
-            className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 border border-amber-500/30 transition-all active:scale-95"
-          >
-            {copiedScript ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>Copied Code.gs to Clipboard!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 text-amber-400" />
-                <span>Copy Backend Script (Code.gs)</span>
-              </>
-            )}
-          </button>
         </div>
 
-        {/* 3. GitHub Pages HTML Exporter */}
+        {/* Backend code */}
         <div className="space-y-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Download className="w-4 h-4 text-cyan-400" />
-              GitHub Pages Standalone HTML
-            </h4>
-          </div>
-
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Download a single self-contained <code className="text-cyan-300">index.html</code> file with Vanilla JS + Tailwind CDN ready to upload to GitHub Pages!
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <FileCode className="w-4 h-4 text-amber-400" aria-hidden="true" />
+            Backend code (Code.gs)
+          </h4>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            The exact Apps Script this app expects. Deployment steps are in docs/MORNING_CHECKLIST.md in the repository.
           </p>
-
           <button
-            onClick={handleDownloadGitHubPagesHtml}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+            type="button"
+            onClick={() => void handleCopyCodeGs()}
+            className="w-full min-h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 border border-amber-500/30"
           >
-            <Download className="w-4 h-4" />
-            Download index.html for GitHub Pages
+            {copiedScript ? <><Check className="w-4 h-4 text-emerald-400" /> Copied</> : <><Copy className="w-4 h-4" /> Copy backend script</>}
           </button>
         </div>
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="w-full py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm"
-        >
+        <button type="button" onClick={onClose} className="w-full min-h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm">
           Done
         </button>
-
       </div>
-    </div>
+    </Modal>
   );
 };
