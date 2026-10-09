@@ -110,6 +110,14 @@ export interface CashDay {
   count: CashCount | null;
 }
 
+export interface ReminderSettings {
+  enabled: boolean;
+  graceMinutes: number;
+  /** Active, rostered employees without a valid email address. */
+  missingEmail: string[];
+  triggerInstalled: boolean;
+}
+
 export interface RosterDay {
   dayName: string;
   morning: string;

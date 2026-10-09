@@ -137,7 +137,8 @@ function setTemplateTimeFormats(sheet) {
 
 /**
  * Owner-run, once (Apps Script editor: choose migrateSheets, then Run). Adds the minute columns and
- * totals to the Template and every MM-YYYY tab, and makes the Template's empty In/Out cells plain text.
+ * totals to the Template and every MM-YYYY tab, makes the Template's empty In/Out cells plain text, and
+ * adds any missing Active / Role / Email header to the Employees tab.
  * Additive only; re-running is harmless. The execution log lists what happened per tab.
  */
 function migrateSheets() {
@@ -153,6 +154,13 @@ function migrateSheets() {
       report.push(name + ': ' + result);
     });
     if (!report.length) report.push('No Template or MM-YYYY tabs found.');
+    // Employees: Active / Role / Email columns (Email is used by shift reminders). Appended only if missing.
+    if (employeesSheet()) {
+      var before = employeesSheet().getLastColumn();
+      ensureEmployeeColumns(['Active', 'Role', 'Email']);
+      var added = employeesSheet().getLastColumn() - before;
+      report.push('Employees: ' + (added > 0 ? added + ' column(s) added' : 'present'));
+    }
     audit('(setup)', 'setup.migrateSheets', 'month tabs', report.join('; '));
     Logger.log('migrateSheets:\n' + report.join('\n'));
     return report;

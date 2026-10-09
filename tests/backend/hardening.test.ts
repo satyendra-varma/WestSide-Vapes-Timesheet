@@ -99,14 +99,14 @@ describe('migrateSheets (owner-run)', () => {
     const beforeTemplate = columnsAtoI(sheet('Template'));
 
     const first = backend.run<string[]>('migrateSheets');
-    expect(first).toEqual(['Template: added, In/Out set to plain text', '09-2026: added']);
+    expect(first).toEqual(['Template: added, In/Out set to plain text', '09-2026: added', 'Employees: present']);
     expect(columnsAtoI(sept)).toBe(beforeSept);
     expect(columnsAtoI(sheet('Template'))).toBe(beforeTemplate);
     expect(sept.formulaAt(3, 10)).toContain('TIMEVALUE');
     expect(sheet('Template').formatAt(3, 3)).toBe('@');
     expect(sheet('Template').formatAt(33, 8)).toBe('@');
 
-    expect(backend.run<string[]>('migrateSheets')).toEqual(['Template: present, In/Out set to plain text', '09-2026: present']);
+    expect(backend.run<string[]>('migrateSheets')).toEqual(['Template: present, In/Out set to plain text', '09-2026: present', 'Employees: present']);
     expect(JSON.stringify(sheet('Audit').dump())).toContain('setup.migrateSheets');
   });
 

@@ -36,6 +36,7 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/stockRequestsClient.test.ts` | phone normalisation, `tel:` links, frontend/backend parity, requests CSV guard |
 | `tests/backend/cash.test.ts` | denomination totals in cents, no float drift, validation, one count per day, float snapshot, staff/manager/date rules, history, float setting, `centsText` |
 | `tests/money.test.ts` | cents formatting, dollar parsing from text, count parsing, denominations, frontend/backend parity |
+| `tests/backend/reminders.test.ts` | email after end + grace only, never twice, not when logged (by anyone), past-midnight shifts, inactive/no-email skipped, off by default, quota stop, triggers, settings validation, date helpers, end-time drift vs the app |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -129,6 +130,13 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
 - [ ] Staff: no float setting, no history, can only count today.
 - [ ] Manager: set float (dollars, e.g. `200.50`); History → month → Edit a past day → save.
 - [ ] `CashCounts` tab: one row per day, whole-number counts, totals in cents.
+
+**Shift reminders (manager settings)**
+- [ ] Mock: Settings shows "The hourly job isn't installed yet" and lists rostered staff without
+      emails; ticking "Send reminder emails" + 90 minutes + Save shows "Reminders are on."
+- [ ] Staging (owner): add your own email for a test employee, roster them yesterday, leave the shift
+      unlogged, enable reminders, run `sendShiftReminders` from the editor. You get one email; running
+      again sends none; the `Reminders` tab has one row.
 
 **Manager Settings → Audit log**
 - [ ] "Show latest" lists entries newest first; the filter narrows them; "Load older" pages when there

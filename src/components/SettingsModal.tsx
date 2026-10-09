@@ -9,6 +9,7 @@ import { useConfirm } from './ConfirmDialog';
 import { useShiftQueue } from '../offline/useShiftQueue';
 import { StaffManager } from './StaffManager';
 import { AuditLog } from './AuditLog';
+import { ReminderSettings } from './ReminderSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -73,6 +74,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     >
       <div id="settings-modal-card" className="space-y-5">
         <StaffManager />
+
+        <ReminderSettings />
 
         <AuditLog />
 

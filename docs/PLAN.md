@@ -133,7 +133,12 @@ Audit (2026-10-09): new feature, nothing existed.
 - [x] Found and fixed a session race while testing (D-043)
 
 ## Phase 8: Reminders, email only (`phase/8-reminders`)
-- [ ] Time-driven trigger: roster vs logged shifts; email after grace period; reminder log prevents
-      duplicates; honour active flag
-- [ ] Email column in Employees (additive, migration note)
-- [ ] **(owner)** Install trigger, add emails, enable reminders (MORNING_CHECKLIST)
+Audit (2026-10-09): new feature; the roster (Timetable) and logged shifts already exist; Employees had
+no email.
+- [x] Hourly time-driven trigger: roster vs logged shifts; email after end + grace period; `Reminders`
+      log prevents duplicates; honours the active flag; quota-aware (D-044)
+- [x] Email column in Employees (additive via `migrateSheets`, migration note)
+- [x] Manager settings (enabled, grace minutes; shows missing emails and trigger status)
+- [x] Tests: 12 (244 total)
+- [ ] **(owner)** Run `installTriggers`, add emails, enable reminders (MORNING_CHECKLIST steps 4.3, 5, 7)
+

@@ -2,6 +2,7 @@
 import { apiCall } from './client';
 import {
   AuditPage,
+  ReminderSettings,
   CashCount,
   CashDay,
   CustomerRequest,
@@ -45,6 +46,8 @@ export interface BackendApi {
   saveCashCount(counts: Record<string, number>, date?: string): Promise<CashDay>;
   getCashHistory(month: string): Promise<CashCount[]>;
   setCashSettings(floatCents: number): Promise<{ floatCents: number }>;
+  getReminderSettings(): Promise<ReminderSettings>;
+  setReminderSettings(enabled: boolean, graceMinutes: number): Promise<ReminderSettings>;
 }
 
 /** All authenticated actions, bound to one session token. */
@@ -74,5 +77,7 @@ export function createBackendApi(token: string): BackendApi {
     saveCashCount: (counts, date) => call('saveCashCount', { counts, date }),
     getCashHistory: (month) => call('getCashHistory', { month }),
     setCashSettings: (floatCents) => call('setCashSettings', { floatCents }),
+    getReminderSettings: () => call('getReminderSettings'),
+    setReminderSettings: (enabled, graceMinutes) => call('setReminderSettings', { enabled, graceMinutes }),
   };
 }

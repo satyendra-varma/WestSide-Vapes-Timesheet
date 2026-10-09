@@ -15,6 +15,8 @@ A mobile-first web app for WestSide Vapes (Kerrisdale) staff:
   product.
 - **Cash:** end-of-day cash count by denomination; total, target float and difference in integer
   cents.
+- **Reminders:** hourly email to a rostered employee whose shift ended without being logged (manager
+  switches it on).
 - Installable PWA. Shift logs made offline are queued on the device and sent automatically.
 
 There's no server or database of our own. The Google Sheet is the system of record, behind an Apps
@@ -37,7 +39,7 @@ Script web app. The app holds data in memory only, for the length of a session.
    │  every other action -> verify token + employee active + token version + role
    │  writes under the script lock; every change appended to the Audit tab
    ▼
- Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable · Audit · Stock · Requests · CashCounts
+ Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable · Audit · Stock · Requests · CashCounts · Reminders
  Script Properties: TOKEN_SECRET · PIN_PEPPER · auth.user.<name> (salt, hash, failures, lock, token version)
 ```
 
@@ -78,6 +80,7 @@ Script web app. The app holds data in memory only, for the length of a session.
 | `src/components/{StockTab,StockList,CustomerRequests}.tsx` | Stock tab: low/out list (session cache) and customer requests (component state only). |
 | `src/components/CashCountTab.tsx`, `src/utils/money.ts` | Cash count UI; integer-cent money helpers (mirror backend `cashTotalCents` / `centsText`). |
 | `apps-script/src/13_cash.js` | Cash counts, float setting, history. |
+| `apps-script/src/14_reminders.js`, `src/components/ReminderSettings.tsx` | Email reminders for unlogged rostered shifts + manager settings. |
 | `src/utils/phone.ts` | NANP phone normalisation + `tel:` links (mirrors backend `normalizePhone`). |
 | `apps-script/src/10_records.js`, `11_stock.js`, `12_requests.js`, `96_triggers.js` | Simple-table helpers, stock, customer requests + purge, `installTriggers`. |
 | `src/hooks/useOnline.ts` | Online/offline state for the header pill. |
@@ -157,6 +160,10 @@ Status Changed At | Status Changed By | Created By.
 - Fulfilled rows are deleted by `purgeFulfilledRequests()` once their status changed more than
   `REQUESTS_PURGE_DAYS` days ago (default 30, manager-settable 1–365, Script Property).
 
+### `Reminders` (created by the first reminder run)
+Key (`date|shift|name`) | Date | Shift | Employee | Sent At. One row per email sent; it prevents
+duplicates.
+
 ### `CashCounts` (created on first save): money in integer cents, D-015 and D-042
 Date | Counted By | Updated At | $100 | $50 | $20 | $10 | $5 | $2 | $1 | 25¢ | 10¢ | 5¢ | Total (cents) |
 Float (cents) | Difference (cents).
@@ -170,6 +177,7 @@ Float (cents) | Difference (cents).
 - `SETUP_MANAGER_NAME` / `SETUP_MANAGER_PIN`: temporary, deleted by `setManagerPin`.
 - `REQUESTS_PURGE_DAYS`: purge period for fulfilled customer requests.
 - `CASH_FLOAT_CENTS`: target float (integer cents).
+- `REMINDERS_ENABLED` (`true`/`false`, default off), `REMINDER_GRACE_MINUTES` (15–720, default 60).
 
 Anyone with edit access to the Sheet or script can bypass auth (D-018).
 
@@ -209,6 +217,9 @@ Error codes: `unauthorized` (bad, expired or revoked token: the app shows re-log
 | `saveCashCount` | staff: today; manager: any date ≤ today | `counts {"10000": n, … "5": n}` (whole numbers 0–10000), `date?` | `{date, floatCents, count}` |
 | `getCashHistory` | manager | `month` `YYYY-MM` | `[count…]` newest first |
 | `setCashSettings` | manager | `floatCents` (JSON integer, 0–10,000,000) | `{floatCents}` |
+
+| `getReminderSettings` | manager | – | `{enabled, graceMinutes, missingEmail:[names], triggerInstalled}` |
+| `setReminderSettings` | manager | `enabled` (boolean), `graceMinutes` (integer 15–720) | settings |
 
 Customer-request errors never contain the name or phone. Audit rows for requests carry only the ID and
 the status change (`request.create`, `request.status`, `request.delete`, `request.purge` with a count).
@@ -251,6 +262,10 @@ script.
   the last used column if they're missing. Existing columns aren't moved. Blank Active = active,
   blank Role = staff.
 - **Audit tab:** new, created on the first audited event.
+- **Employees Email column (Phase 8):** `migrateSheets` appends an `Email` header if missing
+  (additive). Used only for reminders.
+- **Triggers (Phases 6, 8):** `installTriggers()` creates a daily `purgeFulfilledRequests` and an hourly
+  `sendShiftReminders`. It replaces only its own triggers.
 - **Month tabs (Phase 1B):**
   - New tabs get J/K/M–Q automatically on creation. Existing tabs and the Template get them when the
     owner runs `migrateSheets()` once.

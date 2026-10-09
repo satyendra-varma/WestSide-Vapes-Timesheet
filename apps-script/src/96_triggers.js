@@ -3,7 +3,8 @@
 // duplicates them, and leaves any other triggers alone.
 
 var TRIGGERS = [
-  { handler: 'purgeFulfilledRequests', every: 'days', n: 1, atHour: 3 }
+  { handler: 'purgeFulfilledRequests', every: 'days', n: 1, atHour: 3 },
+  { handler: 'sendShiftReminders', every: 'hours', n: 1 }
 ];
 
 function installTriggers() {
