@@ -32,6 +32,8 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/shiftQueue.test.ts` | offline queue: dedupe, cap, corrupt storage, owner isolation, send order, retry vs failed, never sends another user's entries |
 | `tests/pwa.test.ts` | real `sw.js` in a vm: ignores POST, cross-origin, `/exec`, `?action=`, out-of-scope; caches only ok same-origin static files; network-first shell; old caches removed; manifest + icons |
 | `tests/backend/audit.test.ts` | `getAudit` manager-only, newest first, paging, timestamp format, limit clamping, no PINs |
+| `tests/backend/stockRequests.test.ts` | stock add/update/resolve/validation; requests minimal fields, phone formats, no name/phone in errors, logs or audit, roles, formula-looking names, purge by age and setting, `installTriggers` idempotent |
+| `tests/stockRequestsClient.test.ts` | phone normalisation, `tel:` links, frontend/backend parity, requests CSV guard |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -100,6 +102,21 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
 **Accessibility**
 - [ ] Every input has a label; icon buttons have aria-labels; dialogs trap focus and close with Escape.
 - [ ] Buttons and inputs are at least 44 px tall; secondary text is slate-400 or lighter.
+
+**Stock & Requests**
+- [ ] Stock: add "Coil 0.4ohm" as Out; it shows with your name and time; ticking Resolved moves it to
+      "Show resolved"; Reopen works; reporting the same product again updates it.
+- [ ] Requests: "555-0123" is refused ("Enter a 10-digit phone number…"); "(604) 555-0123" is saved
+      as 604-555-0123. The privacy line "Used only to contact you about this request." is visible.
+- [ ] Requests with the same product in different case are grouped together; the product field
+      suggests earlier products.
+- [ ] Tapping the phone opens the dialer (`tel:+1…`).
+- [ ] Staff: can change status; no Delete, no purge setting, no Export.
+- [ ] Manager: Delete (with confirm), purge days (1–365), Export requests CSV.
+- [ ] Revoke the session (manager resets your PIN elsewhere): customer names and phones disappear from
+      the screen as soon as the re-login prompt shows.
+- [ ] Devtools → Application: no customer data in Local/Session Storage or Cache Storage.
+- [ ] Audit tab: request rows show only the ID and the status, never a name, phone or product.
 
 **Manager Settings → Audit log**
 - [ ] "Show latest" lists entries newest first; the filter narrows them; "Load older" pages when there

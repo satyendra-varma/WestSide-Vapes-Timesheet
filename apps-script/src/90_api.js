@@ -15,7 +15,16 @@ var ACTIONS = {
   setPin: { auth: true, write: true, manager: true, handler: actionSetPin },
   unlockEmployee: { auth: true, write: true, manager: true, handler: actionUnlockEmployee },
   setEmployeeActive: { auth: true, write: true, manager: true, handler: actionSetEmployeeActive },
-  getAudit: { auth: true, manager: true, handler: actionGetAudit }
+  getAudit: { auth: true, manager: true, handler: actionGetAudit },
+  getStock: { auth: true, handler: actionGetStock },
+  addStock: { auth: true, write: true, handler: actionAddStock },
+  setStockResolved: { auth: true, write: true, handler: actionSetStockResolved },
+  getRequests: { auth: true, handler: actionGetRequests },
+  addRequest: { auth: true, write: true, handler: actionAddRequest },
+  updateRequestStatus: { auth: true, write: true, handler: actionUpdateRequestStatus },
+  deleteRequest: { auth: true, write: true, manager: true, handler: actionDeleteRequest },
+  getRequestSettings: { auth: true, manager: true, handler: actionGetRequestSettings },
+  setRequestSettings: { auth: true, write: true, manager: true, handler: actionSetRequestSettings }
 };
 
 function jsonOutput(body) {

@@ -2,6 +2,10 @@
 import { apiCall } from './client';
 import {
   AuditPage,
+  CustomerRequest,
+  RequestStatus,
+  StockItem,
+  StockStatus,
   EmployeeInfo,
   LoginResult,
   RosterDay,
@@ -26,6 +30,15 @@ export interface BackendApi {
   unlockEmployee(name: string): Promise<{ name: string }>;
   setEmployeeActive(name: string, active: boolean): Promise<{ name: string; active: boolean }>;
   getAudit(limit: number, offset: number): Promise<AuditPage>;
+  getStock(): Promise<StockItem[]>;
+  addStock(product: string, status: StockStatus): Promise<StockItem[]>;
+  setStockResolved(id: string, resolved: boolean): Promise<StockItem[]>;
+  getRequests(): Promise<CustomerRequest[]>;
+  addRequest(customerName: string, phone: string, product: string): Promise<CustomerRequest[]>;
+  updateRequestStatus(id: string, status: RequestStatus): Promise<CustomerRequest[]>;
+  deleteRequest(id: string): Promise<CustomerRequest[]>;
+  getRequestSettings(): Promise<{ purgeDays: number }>;
+  setRequestSettings(purgeDays: number): Promise<{ purgeDays: number }>;
 }
 
 /** All authenticated actions, bound to one session token. */
@@ -42,5 +55,14 @@ export function createBackendApi(token: string): BackendApi {
     unlockEmployee: (name) => call('unlockEmployee', { name }),
     setEmployeeActive: (name, active) => call('setEmployeeActive', { name, active }),
     getAudit: (limit, offset) => call('getAudit', { limit, offset }),
+    getStock: () => call('getStock'),
+    addStock: (product, status) => call('addStock', { product, status }),
+    setStockResolved: (id, resolved) => call('setStockResolved', { id, resolved }),
+    getRequests: () => call('getRequests'),
+    addRequest: (customerName, phone, product) => call('addRequest', { customerName, phone, product }),
+    updateRequestStatus: (id, status) => call('updateRequestStatus', { id, status }),
+    deleteRequest: (id) => call('deleteRequest', { id }),
+    getRequestSettings: () => call('getRequestSettings'),
+    setRequestSettings: (purgeDays) => call('setRequestSettings', { purgeDays }),
   };
 }

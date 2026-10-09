@@ -4,6 +4,7 @@ import { BottomNav, TabType } from './components/BottomNav';
 import { ShiftLoggingTab } from './components/ShiftLoggingTab';
 import { MonthlyTimesheetTab } from './components/MonthlyTimesheetTab';
 import { TimetableTab } from './components/TimetableTab';
+import { StockTab } from './components/StockTab';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './auth/AuthContext';
@@ -55,6 +56,7 @@ const MainApp: React.FC = () => {
         {activeTab === 'logging' && <ShiftLoggingTab onSendQueued={sendQueued} />}
         {activeTab === 'monthly' && <MonthlyTimesheetTab />}
         {activeTab === 'timetable' && <TimetableTab />}
+        {activeTab === 'stock' && <StockTab />}
       </main>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

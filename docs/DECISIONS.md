@@ -403,3 +403,33 @@ There's no data in any cache (verified in a production build: only the shell, JS
 after logging in and loading a month). It's registered only in production builds. Icons are generated
 by `scripts/make-icons.ts` (no image library), and a test checks the committed PNGs match it.
 
+## D-041: Stock list and customer requests: access and data rules
+*2026-10-09 · Accepted · Phase 6*
+
+- **Who can do what:**
+  - Any logged-in staff member can view full name and phone, create requests and change status (owner
+    instruction).
+  - Only the manager can delete, change the purge period, or export.
+  - Staff have no CSV export of customer data.
+- **Stored data:** name (≤60), phone, product (≤80), dates, status, who changed it.
+  - Phones must be North American 10-digit numbers and are stored as `604-555-0123`. That form starts
+    with a digit, so no formula-guard apostrophe is ever needed, and it reads well in the sheet.
+  - The app builds `tel:+1…` links from it.
+- **Privacy:**
+  - Validation messages never echo input.
+  - Audit rows carry the request ID and status only (not even the product, since a product plus a
+    timestamp could identify a customer).
+  - The purge logs a count only.
+- **In the browser:** requests live only in the `CustomerRequests` component's state. They're dropped
+  immediately when the session becomes inactive (expiry or revocation shows the re-login prompt) and on
+  logout. They never enter the shared cache, storage, the service worker, the offline queue or logs; a
+  code-rule test enforces this.
+- Requests are grouped by product (case-insensitive) with autocomplete from previously entered request
+  and stock product names. There's no automatic matching to the stock list (owner instruction).
+- **Stock items:** reporting an unresolved product again updates it instead of duplicating it.
+  Resolved items are hidden behind "Show resolved". There's no delete (not requested); they can be
+  reopened.
+- **Purge trigger:** `purgeFulfilledRequests` runs daily from `installTriggers()`, which the owner runs
+  once. A request is deleted when it's fulfilled and its status changed more than N days ago (by date in
+  the sheet's time zone).
+

@@ -954,6 +954,255 @@ function migrateSheets() {
   });
 }
 
+// ---- 10_records.js ----
+// Small helpers for tabs that are simple tables: row 1 = header, one record per row, column A = ID.
+// All cells are written as plain text (format "@") so Sheets never reinterprets them, and
+// user-entered text goes through safeCellText (formula-injection guard).
+
+/** Returns the tab, creating it with a header row (and plain-text format) if it's missing. */
+function tableSheet(name, header) {
+  var ss = spreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+  }
+  return sheet;
+}
+
+/** A cell as text: Date values (if someone typed in the sheet) are formatted in the sheet's zone. */
+function cellText(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, sheetTimeZone(), 'yyyy-MM-dd HH:mm');
+  }
+  return String(value === null || value === undefined ? '' : value);
+}
+
+/** All data rows as arrays of text, with their 1-based sheet row number. */
+function tableRows(sheet, width) {
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  return sheet.getRange(2, 1, last - 1, width).getValues().map(function (r, i) {
+    return { row: i + 2, cells: r.map(cellText) };
+  }).filter(function (r) { return r.cells[0] !== ''; });
+}
+
+function appendTableRow(sheet, cells) {
+  var row = sheet.getLastRow() + 1;
+  var range = sheet.getRange(row, 1, 1, cells.length);
+  range.setNumberFormat('@');
+  range.setValues([cells.map(safeCellText)]);
+  return row;
+}
+
+function writeTableCells(sheet, row, col, cells) {
+  var range = sheet.getRange(row, col, 1, cells.length);
+  range.setNumberFormat('@');
+  range.setValues([cells.map(safeCellText)]);
+}
+
+function findTableRow(sheet, width, id) {
+  var rows = tableRows(sheet, width);
+  for (var i = 0; i < rows.length; i++) if (rows[i].cells[0] === id) return rows[i];
+  return null;
+}
+
+function newRecordId(prefix) {
+  return prefix + '-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+function nowStamp() {
+  return Utilities.formatDate(new Date(), sheetTimeZone(), 'yyyy-MM-dd HH:mm');
+}
+
+/** Trimmed, single-spaced text with a length limit; throws a generic message naming only the field. */
+function requiredText(value, max, field, label) {
+  var text = cleanName(value);
+  if (!text || text.length > max) {
+    throw fail('invalid', 'Enter ' + label + ' (up to ' + max + ' characters).', { field: field });
+  }
+  return text;
+}
+
+// ---- 11_stock.js ----
+// Stock tab: low / out-of-stock list. Any logged-in staff member can add items and tick them resolved.
+// Columns: ID | Product | Status | Noted By | Noted At | Resolved | Resolved By | Resolved At
+
+var STOCK_HEADER = ['ID', 'Product', 'Status', 'Noted By', 'Noted At', 'Resolved', 'Resolved By', 'Resolved At'];
+var STOCK_STATUSES = ['low', 'out'];
+
+function stockSheet() {
+  return tableSheet('Stock', STOCK_HEADER);
+}
+
+function stockItem(r) {
+  var c = r.cells;
+  return {
+    id: c[0], product: c[1], status: c[2], notedBy: c[3], notedAt: c[4],
+    resolved: String(c[5]).toUpperCase() === 'TRUE', resolvedBy: c[6], resolvedAt: c[7]
+  };
+}
+
+function actionGetStock() {
+  var sheet = spreadsheet().getSheetByName('Stock');
+  return sheet ? tableRows(sheet, STOCK_HEADER.length).map(stockItem) : [];
+}
+
+/** req: { product, status: "low"|"out" }. An open item for the same product is updated instead of duplicated. */
+function actionAddStock(req, session) {
+  var product = requiredText(req.product, 80, 'product', 'a product name');
+  var status = String(req.status || '');
+  if (STOCK_STATUSES.indexOf(status) === -1) throw fail('invalid', 'Status must be low or out.', { field: 'status' });
+
+  var sheet = stockSheet();
+  var rows = tableRows(sheet, STOCK_HEADER.length);
+  for (var i = 0; i < rows.length; i++) {
+    var item = stockItem(rows[i]);
+    if (!item.resolved && item.product.toLowerCase() === product.toLowerCase()) {
+      writeTableCells(sheet, rows[i].row, 3, [status, session.name, nowStamp()]);
+      audit(session.name, 'stock.update', item.id, item.status + ' -> ' + status);
+      return actionGetStock();
+    }
+  }
+  var id = newRecordId('S');
+  appendTableRow(sheet, [id, product, status, session.name, nowStamp(), 'FALSE', '', '']);
+  audit(session.name, 'stock.add', id, status);
+  return actionGetStock();
+}
+
+/** req: { id, resolved: boolean } */
+function actionSetStockResolved(req, session) {
+  if (typeof req.resolved !== 'boolean') throw fail('invalid', 'resolved must be true or false.', { field: 'resolved' });
+  var sheet = stockSheet();
+  var found = findTableRow(sheet, STOCK_HEADER.length, String(req.id || ''));
+  if (!found) throw fail('not_found', 'That stock item no longer exists.');
+  writeTableCells(sheet, found.row, 6, req.resolved ? ['TRUE', session.name, nowStamp()] : ['FALSE', '', '']);
+  audit(session.name, req.resolved ? 'stock.resolve' : 'stock.reopen', found.cells[0], '');
+  return actionGetStock();
+}
+
+// ---- 12_requests.js ----
+// Customer requests (DECISIONS D-016, D-041). Minimal data: name, phone, product, dates, status.
+// Any logged-in staff member can view, create and update status; only the manager can delete,
+// change the purge period, or export. Names and phone numbers never appear in error messages or
+// in the Audit tab (audit rows carry the request ID and status only). Fulfilled requests are
+// deleted automatically after REQUESTS_PURGE_DAYS by purgeFulfilledRequests() (time-driven trigger).
+// Columns: ID | Created At | Customer Name | Phone | Product | Status | Status Changed At | Status Changed By | Created By
+
+var REQUEST_HEADER = ['ID', 'Created At', 'Customer Name', 'Phone', 'Product', 'Status', 'Status Changed At', 'Status Changed By', 'Created By'];
+var REQUEST_STATUSES = ['open', 'contacted', 'fulfilled'];
+var PURGE_DAYS_KEY = 'REQUESTS_PURGE_DAYS';
+var DEFAULT_PURGE_DAYS = 30;
+
+function requestsSheet() {
+  return tableSheet('Requests', REQUEST_HEADER);
+}
+
+/**
+ * North American numbers only: 10 digits (optionally +1 / 1 first), area code and exchange starting
+ * 2-9. Returns "604-555-0123" or "" if invalid. Stored in that form: it starts with a digit (so no
+ * formula-guard apostrophe is needed) and reads naturally in the sheet. Mirrors src/utils/phone.ts.
+ */
+function normalizePhone(value) {
+  var raw = String(value === null || value === undefined ? '' : value).trim();
+  if (!/^[+\d\s().-]+$/.test(raw)) return '';
+  var digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
+  if (digits.length !== 10) return '';
+  if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return '';
+  return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
+}
+
+function requestItem(r) {
+  var c = r.cells;
+  return {
+    id: c[0], createdAt: c[1], customerName: c[2], phone: c[3], product: c[4],
+    status: c[5], statusChangedAt: c[6], statusChangedBy: c[7], createdBy: c[8]
+  };
+}
+
+function actionGetRequests() {
+  var sheet = spreadsheet().getSheetByName('Requests');
+  return sheet ? tableRows(sheet, REQUEST_HEADER.length).map(requestItem) : [];
+}
+
+/** req: { customerName, phone, product } */
+function actionAddRequest(req, session) {
+  var name = requiredText(req.customerName, 60, 'customerName', "the customer's name");
+  var phone = normalizePhone(req.phone);
+  if (!phone) throw fail('invalid', 'Enter a 10-digit North American phone number.', { field: 'phone' });
+  var product = requiredText(req.product, 80, 'product', 'the product');
+  var id = newRecordId('R');
+  var stamp = nowStamp();
+  appendTableRow(requestsSheet(), [id, stamp, name, phone, product, 'open', stamp, session.name, session.name]);
+  audit(session.name, 'request.create', id, 'open');
+  return actionGetRequests();
+}
+
+/** req: { id, status } */
+function actionUpdateRequestStatus(req, session) {
+  var status = String(req.status || '');
+  if (REQUEST_STATUSES.indexOf(status) === -1) throw fail('invalid', 'Status must be open, contacted or fulfilled.', { field: 'status' });
+  var sheet = requestsSheet();
+  var found = findTableRow(sheet, REQUEST_HEADER.length, String(req.id || ''));
+  if (!found) throw fail('not_found', 'That request no longer exists.');
+  var before = found.cells[5];
+  if (before !== status) {
+    writeTableCells(sheet, found.row, 6, [status, nowStamp(), session.name]);
+    audit(session.name, 'request.status', found.cells[0], before + ' -> ' + status);
+  }
+  return actionGetRequests();
+}
+
+/** req: { id }. Manager only (router). */
+function actionDeleteRequest(req, session) {
+  var sheet = requestsSheet();
+  var found = findTableRow(sheet, REQUEST_HEADER.length, String(req.id || ''));
+  if (!found) throw fail('not_found', 'That request no longer exists.');
+  sheet.deleteRow(found.row);
+  audit(session.name, 'request.delete', found.cells[0], '');
+  return actionGetRequests();
+}
+
+function purgeDays() {
+  var n = Number(scriptProps().getProperty(PURGE_DAYS_KEY));
+  return n >= 1 && n <= 365 ? Math.floor(n) : DEFAULT_PURGE_DAYS;
+}
+
+function actionGetRequestSettings() {
+  return { purgeDays: purgeDays() };
+}
+
+/** req: { purgeDays: 1-365 }. Manager only (router). */
+function actionSetRequestSettings(req, session) {
+  var n = Number(req.purgeDays);
+  if (!(n >= 1 && n <= 365) || Math.floor(n) !== n) throw fail('invalid', 'Purge period must be 1 to 365 days.', { field: 'purgeDays' });
+  var before = purgeDays();
+  scriptProps().setProperty(PURGE_DAYS_KEY, String(n));
+  audit(session.name, 'request.purgeDays', 'Requests', before + ' -> ' + n + ' days');
+  return { purgeDays: n };
+}
+
+/**
+ * Deletes fulfilled requests whose status changed more than purgeDays() ago. Run daily by the trigger
+ * from installTriggers(); safe to run by hand. Logs only the count.
+ */
+function purgeFulfilledRequests() {
+  return withScriptLock(function () {
+    var sheet = spreadsheet().getSheetByName('Requests');
+    var days = purgeDays();
+    if (!sheet) return 0;
+    var cutoff = Utilities.formatDate(new Date(Date.now() - days * 86400000), sheetTimeZone(), 'yyyy-MM-dd');
+    var doomed = tableRows(sheet, REQUEST_HEADER.length).filter(function (r) {
+      var item = requestItem(r);
+      return item.status === 'fulfilled' && item.statusChangedAt && item.statusChangedAt.slice(0, 10) < cutoff;
+    });
+    for (var i = doomed.length - 1; i >= 0; i--) sheet.deleteRow(doomed[i].row);
+    audit('(trigger)', 'request.purge', 'Requests', doomed.length + ' fulfilled request(s) older than ' + days + ' days deleted');
+    return doomed.length;
+  });
+}
+
 // ---- 90_api.js ----
 // HTTP entry points. Every action is a POST with a JSON body sent as text/plain (no CORS preflight):
 //   { action, token, ...params }  ->  {status: "success", data} | {status: "error", code, message} |
@@ -972,7 +1221,16 @@ var ACTIONS = {
   setPin: { auth: true, write: true, manager: true, handler: actionSetPin },
   unlockEmployee: { auth: true, write: true, manager: true, handler: actionUnlockEmployee },
   setEmployeeActive: { auth: true, write: true, manager: true, handler: actionSetEmployeeActive },
-  getAudit: { auth: true, manager: true, handler: actionGetAudit }
+  getAudit: { auth: true, manager: true, handler: actionGetAudit },
+  getStock: { auth: true, handler: actionGetStock },
+  addStock: { auth: true, write: true, handler: actionAddStock },
+  setStockResolved: { auth: true, write: true, handler: actionSetStockResolved },
+  getRequests: { auth: true, handler: actionGetRequests },
+  addRequest: { auth: true, write: true, handler: actionAddRequest },
+  updateRequestStatus: { auth: true, write: true, handler: actionUpdateRequestStatus },
+  deleteRequest: { auth: true, write: true, manager: true, handler: actionDeleteRequest },
+  getRequestSettings: { auth: true, manager: true, handler: actionGetRequestSettings },
+  setRequestSettings: { auth: true, write: true, manager: true, handler: actionSetRequestSettings }
 };
 
 function jsonOutput(body) {
@@ -1075,4 +1333,28 @@ function setManagerPin() {
     props.deleteProperty(PROP_KEYS.SETUP_MANAGER_PIN);
     props.deleteProperty(PROP_KEYS.SETUP_MANAGER_NAME);
   }
+}
+
+// ---- 96_triggers.js ----
+// Time-driven triggers. Claude can't install them; the owner runs installTriggers() once from the
+// Apps Script editor (see docs/MORNING_CHECKLIST.md). Re-running replaces our triggers, never
+// duplicates them, and leaves any other triggers alone.
+
+var TRIGGERS = [
+  { handler: 'purgeFulfilledRequests', every: 'days', n: 1, atHour: 3 }
+];
+
+function installTriggers() {
+  var ours = TRIGGERS.map(function (t) { return t.handler; });
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (ours.indexOf(trigger.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(trigger);
+  });
+  TRIGGERS.forEach(function (t) {
+    var builder = ScriptApp.newTrigger(t.handler).timeBased();
+    if (t.every === 'days') builder = builder.everyDays(t.n).atHour(t.atHour);
+    else builder = builder.everyHours(t.n);
+    builder.create();
+  });
+  Logger.log('Installed triggers: ' + ours.join(', '));
+  return ours;
 }

@@ -1,4 +1,5 @@
 // CSV export for payroll (manager only). No money, only time worked (DECISIONS D-014).
+import { CustomerRequest } from '../api/types';
 import { ShiftRecord } from '../types';
 import { EmployeeTotal, formatDecimalHours, formatDuration, needsReview, shiftMinutes } from './hours';
 
@@ -46,6 +47,17 @@ export function shiftsCsv(records: ShiftRecord[]): string {
   for (const r of sorted) {
     const minutes = shiftMinutes(r.inTime, r.outTime);
     rows.push([r.date, r.shift, r.employeeName, r.inTime, r.outTime, minutes, formatDuration(minutes), formatDecimalHours(minutes), needsReview(r.inTime, r.outTime) ? 'yes' : '']);
+  }
+  return toCsv(rows);
+}
+
+/** Manager-only export of customer requests (DECISIONS D-041); same injection guard as above. */
+export function requestsCsv(requests: CustomerRequest[]): string {
+  const rows: Array<Array<string | number>> = [
+    ['ID', 'Created', 'Customer name', 'Phone', 'Product', 'Status', 'Status changed', 'Changed by', 'Created by'],
+  ];
+  for (const r of [...requests].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    rows.push([r.id, r.createdAt, r.customerName, r.phone, r.product, r.status, r.statusChangedAt, r.statusChangedBy, r.createdBy]);
   }
   return toCsv(rows);
 }
