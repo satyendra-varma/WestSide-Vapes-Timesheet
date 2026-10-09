@@ -360,3 +360,46 @@ type-checked. Adding them early produced no errors. Strict mode itself stays in 
 - A "move shift to another date" action was considered and not added: it isn't in the plan, and
   delete + re-log covers it, with both steps audited.
 
+## D-039: Offline queue for new shift logs only, in localStorage, per user
+*2026-10-09 · Accepted · Phase 5 (refines D-007 and D-024)*
+
+- When a new shift log fails with "no connection" or "server busy", it's queued in localStorage
+  (`wsv_shift_queue`) instead of being lost. It needs localStorage to survive a reload or a dead
+  battery.
+- Only the shift fields are stored, tagged with the user who logged it.
+- Edits, deletes, roster changes and customer data are never queued: they need a fresh view of the
+  sheet.
+- **Sending:** on login, when the browser comes back online, every 30 s while anything is waiting, and
+  on "Send now". Always with the owner's own session; other users' entries are never sent and only
+  their count is shown.
+- **Visible state:**
+  - a header pill "N unsent";
+  - a "Not sent yet" list on Log Shift with per-item status, attempt count and failure reason;
+  - Discard needs confirmation.
+- **Failures:** conflicts and validation failures become "failed" (not retried) with the reason;
+  network or busy errors stay queued; an expired session pauses until re-login.
+- **Logout:** warns when the user has unsent items ("Stay logged in" / "Delete and log out") and then
+  removes only that user's entries. Session expiry doesn't clear the queue, so re-login resumes
+  sending.
+- Switching servers is blocked while items are unsent.
+- At most 50 entries.
+- This is the one exception to "no data in localStorage": it's needed to avoid losing hours worked.
+
+## D-040: PWA service worker caches only same-origin static files
+*2026-10-09 · Accepted · Phase 5*
+
+`public/sw.js` returns early (doesn't call `respondWith`) for:
+- any non-GET request; all API calls, including customer requests, are POST;
+- any other origin (Apps Script, the mock backend, anything external);
+- anything API-like (`/exec`, `?action=`) as a second net;
+- paths outside the app's scope.
+
+Within scope:
+- Hashed `assets/`, `icons/` and the manifest are cache-first.
+- Page navigations are network-first, so a new deploy is picked up; the cached shell is only an
+  offline fallback.
+
+There's no data in any cache (verified in a production build: only the shell, JS and CSS were cached
+after logging in and loading a month). It's registered only in production builds. Icons are generated
+by `scripts/make-icons.ts` (no image library), and a test checks the committed PNGs match it.
+

@@ -1,6 +1,7 @@
 // Typed wrappers for each backend action.
 import { apiCall } from './client';
 import {
+  AuditPage,
   EmployeeInfo,
   LoginResult,
   RosterDay,
@@ -24,6 +25,7 @@ export interface BackendApi {
   setPin(name: string, pin: string): Promise<{ name: string }>;
   unlockEmployee(name: string): Promise<{ name: string }>;
   setEmployeeActive(name: string, active: boolean): Promise<{ name: string; active: boolean }>;
+  getAudit(limit: number, offset: number): Promise<AuditPage>;
 }
 
 /** All authenticated actions, bound to one session token. */
@@ -39,5 +41,6 @@ export function createBackendApi(token: string): BackendApi {
     setPin: (name, pin) => call('setPin', { name, pin }),
     unlockEmployee: (name) => call('unlockEmployee', { name }),
     setEmployeeActive: (name, active) => call('setEmployeeActive', { name, active }),
+    getAudit: (limit, offset) => call('getAudit', { limit, offset }),
   };
 }

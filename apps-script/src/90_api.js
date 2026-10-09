@@ -14,7 +14,8 @@ var ACTIONS = {
   updateTimetable: { auth: true, write: true, manager: true, handler: actionUpdateTimetable },
   setPin: { auth: true, write: true, manager: true, handler: actionSetPin },
   unlockEmployee: { auth: true, write: true, manager: true, handler: actionUnlockEmployee },
-  setEmployeeActive: { auth: true, write: true, manager: true, handler: actionSetEmployeeActive }
+  setEmployeeActive: { auth: true, write: true, manager: true, handler: actionSetEmployeeActive },
+  getAudit: { auth: true, manager: true, handler: actionGetAudit }
 };
 
 function jsonOutput(body) {

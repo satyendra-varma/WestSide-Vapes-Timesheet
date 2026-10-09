@@ -29,6 +29,9 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `src/utils/csv.test.ts` | CSV injection guard (`= + - @` tab CR), RFC 4180 quoting, BOM/CRLF, summary + daily rows, totals equal the sum of daily minutes |
 | `tests/backend/completeness.test.ts` | edit/delete conflict when the slot changed since it was loaded, audit who/when/old→new, shared roster |
 | `tests/store.test.ts` | cache staleness rules for refresh-on-focus |
+| `tests/shiftQueue.test.ts` | offline queue: dedupe, cap, corrupt storage, owner isolation, send order, retry vs failed, never sends another user's entries |
+| `tests/pwa.test.ts` | real `sw.js` in a vm: ignores POST, cross-origin, `/exec`, `?action=`, out-of-scope; caches only ok same-origin static files; network-first shell; old caches removed; manifest + icons |
+| `tests/backend/audit.test.ts` | `getAudit` manager-only, newest first, paging, timestamp format, limit clamping, no PINs |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -77,6 +80,30 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
 **Timetable**
 - [ ] Staff see the roster without Edit buttons; the manager edits a day and the change persists across
       a refresh and from another browser.
+
+**Offline queue (shift logs only)**
+- [ ] Devtools → Network → Offline (or stop `npm run mock`), then submit a shift: an amber toast says
+      it's saved on this device; Log Shift shows "Not sent yet (1)"; the header shows "1 unsent".
+- [ ] Logout while unsent: a dialog offers "Stay logged in" / "Delete and log out".
+- [ ] Back online: within 30 s (or "Send now") the item disappears and the shift is in the Timesheet.
+- [ ] Queue a shift for a slot someone else then fills: it becomes "Not saved: Already logged …" and
+      Discard asks for confirmation.
+- [ ] Edits, deletes and roster saves while offline show "not saved" and are not queued.
+
+**PWA**
+- [ ] `npm run build -- --mode mock` + `npx vite preview` (with `npm run mock` running): Application →
+      Service Workers shows `sw.js` active for `/WestSide-Vapes-Timesheet/`; Application → Cache
+      Storage `wsv-static-v1` holds only `/WestSide-Vapes-Timesheet/`, `assets/*.js`, `assets/*.css`
+      (+ icons/manifest), never an `/exec` response.
+- [ ] Chrome shows an install option; the installed app opens standalone with the green bolt icon.
+
+**Accessibility**
+- [ ] Every input has a label; icon buttons have aria-labels; dialogs trap focus and close with Escape.
+- [ ] Buttons and inputs are at least 44 px tall; secondary text is slate-400 or lighter.
+
+**Manager Settings → Audit log**
+- [ ] "Show latest" lists entries newest first; the filter narrows them; "Load older" pages when there
+      are more than 50.
 
 **Manager Settings → Staff & PINs**
 - [ ] A weak PIN (`111111`, `123456`) is refused; a good one shows the "Tell them in person" message.

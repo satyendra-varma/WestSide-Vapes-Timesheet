@@ -96,13 +96,19 @@ or delete could overwrite a change made elsewhere; cached data only refreshed on
 - [x] Tests: 10 new (143 total)
 
 ## Phase 5: Reliability + polish (`phase/5-reliability-polish`)
-- [ ] Offline queue for shift logs only: queued/failed states, retry, no silent loss; warn + clear on
-      logout
-- [ ] Installable PWA; service worker caches same-origin static assets only (never API, never customer
-      data)
-- [ ] Loading/error/offline states; accessibility (labels, 44 px targets, modal focus, contrast)
-- [ ] Shop name + API URL in config; refresh event name as a constant
-- [ ] Audit log complete and viewable by the manager
+Audit (2026-10-09): a network error meant "not saved"; no PWA; `window.confirm` in 3 places; several
+controls under 44 px; slate-500 text below AA contrast; no way to read the audit log in the app. The
+shop name and URL were already in config, and the old `westside_vapes_*` event was removed in 1A (no
+window events are used).
+- [x] Offline queue for shift logs only: queued/failed states, retry, no silent loss; warn + clear on
+      logout; per-user (D-039)
+- [x] Installable PWA; service worker caches same-origin static files only, never API or customer data
+      (D-040)
+- [x] Loading/error/offline states (offline pill, unsent pill, retry buttons); accessibility (labels,
+      44 px targets, modal focus, contrast); in-app confirm dialogs
+- [x] Shop name + API URL in config (done 1A); refresh event removed (no string to replace)
+- [x] Audit log complete (every write and auth event) and viewable by the manager (`getAudit`)
+- [x] Tests: queue (10), PWA (15), audit (5): 172 total
 
 ## Phase 6: Stock list + customer requests (`phase/6-stock-requests`)
 - [ ] Stock list: product, low|out, noted by, date, resolved tick

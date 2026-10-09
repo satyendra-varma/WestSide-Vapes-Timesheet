@@ -8,12 +8,14 @@ import { toMonthYear, useEmployees, useTimesheet } from '../data/hooks';
 import { formatDecimalHours, formatDuration, needsReview, shiftMinutes, totalMinutes, totalsByEmployee } from '../utils/hours';
 import { PayPeriod, daysInMonth as getDaysInMonth, periodDayRange, recordsInPeriod } from '../utils/periods';
 import { Modal } from './Modal';
+import { useConfirm } from './ConfirmDialog';
 import { downloadCsv, shiftsCsv, summaryCsv } from '../utils/csv';
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export const MonthlyTimesheetTab: React.FC = () => {
   const { user, isManager, api } = useAuth();
+  const confirm = useConfirm();
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -160,7 +162,13 @@ export const MonthlyTimesheetTab: React.FC = () => {
   // Delete Shift (manager only; the server enforces this too)
   const handleDeleteShift = async (record: ShiftRecord) => {
     if (!api) return;
-    if (!confirm(`Delete ${record.employeeName}'s ${record.shift} shift on ${record.date}?`)) return;
+    const ok = await confirm({
+      title: 'Delete shift?',
+      message: `Delete ${record.employeeName}'s ${record.shift} shift on ${record.date} (${record.inTime || '--:--'}-${record.outTime || '--:--'})? This is recorded in the audit log.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     setDeletingId(record.id);
     setActionError(null);
     try {
@@ -208,7 +216,8 @@ export const MonthlyTimesheetTab: React.FC = () => {
             id="month-select-picker"
             value={selectedMonth}
             onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
-            className="bg-slate-950 border-2 border-slate-800 text-cyan-400 font-extrabold text-xs rounded-xl px-3 py-2 focus:border-cyan-500 focus:outline-none"
+            aria-label="Month"
+            className="min-h-11 bg-slate-950 border-2 border-slate-800 text-cyan-400 font-extrabold text-xs rounded-xl px-3 py-2 focus:border-cyan-500 focus:outline-none"
           />
         </div>
 
@@ -219,7 +228,8 @@ export const MonthlyTimesheetTab: React.FC = () => {
               key={option.id}
               type="button"
               onClick={() => setPeriod(option.id)}
-              className={`py-2 rounded-lg text-xs font-extrabold border transition-all ${
+              aria-pressed={period === option.id}
+              className={`min-h-11 rounded-lg text-xs font-extrabold border transition-all ${
                 period === option.id
                   ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
                   : 'text-slate-400 hover:text-slate-200 border-transparent'
@@ -233,22 +243,24 @@ export const MonthlyTimesheetTab: React.FC = () => {
         {/* Search & Filter bar */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search staff, date, shift..."
+              aria-label="Search shifts"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800/90 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              className="w-full min-h-11 bg-slate-950 border border-slate-800/90 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
             />
           </div>
 
           <div className="relative">
-            <Filter className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Filter className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <select
               value={filterEmployee}
               onChange={(e) => setFilterEmployee(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800/90 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white appearance-none focus:outline-none focus:border-cyan-500"
+              aria-label="Filter by employee"
+              className="w-full min-h-11 bg-slate-950 border border-slate-800/90 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white appearance-none focus:outline-none focus:border-cyan-500"
             >
               <option value="ALL">All Staff Members ({uniqueEmployees})</option>
               {Array.from(new Set(records.map((r) => r.employeeName))).map((emp) => (
@@ -265,7 +277,7 @@ export const MonthlyTimesheetTab: React.FC = () => {
           <div className="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-3 text-center">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">Total Hours</span>
             <span className="text-base font-black text-emerald-400 mt-0.5 block whitespace-nowrap">{formatDuration(filteredMinutes)}</span>
-            <span className="text-[10px] font-bold text-slate-500 block">{formatDecimalHours(filteredMinutes)} h</span>
+            <span className="text-[10px] font-bold text-slate-400 block">{formatDecimalHours(filteredMinutes)} h</span>
           </div>
           <div className="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-3 text-center">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block tracking-wider">Morning</span>
@@ -337,7 +349,7 @@ export const MonthlyTimesheetTab: React.FC = () => {
                       <td className="text-right text-slate-300 font-bold px-1">{t.shifts}</td>
                       <td className="text-right font-black text-emerald-400 px-1 whitespace-nowrap">{formatDuration(t.minutes)}</td>
                       <td className="text-right text-slate-400 font-bold px-1">{formatDecimalHours(t.minutes)}</td>
-                      <td className={`text-right font-bold px-1 ${t.needsReview > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{t.needsReview}</td>
+                      <td className={`text-right font-bold px-1 ${t.needsReview > 0 ? 'text-amber-300' : 'text-slate-400'}`}>{t.needsReview}</td>
                     </tr>
                   );
                 })}
@@ -348,7 +360,7 @@ export const MonthlyTimesheetTab: React.FC = () => {
                   <td className="text-right text-slate-300 font-bold px-1">{employeeTotals.reduce((sum, t) => sum + t.shifts, 0)}</td>
                   <td className="text-right font-black text-white px-1 whitespace-nowrap">{formatDuration(periodMinutes)}</td>
                   <td className="text-right text-slate-300 font-bold px-1">{formatDecimalHours(periodMinutes)}</td>
-                  <td className={`text-right font-bold px-1 ${periodNeedsReview > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{periodNeedsReview}</td>
+                  <td className={`text-right font-bold px-1 ${periodNeedsReview > 0 ? 'text-amber-300' : 'text-slate-400'}`}>{periodNeedsReview}</td>
                 </tr>
               </tfoot>
             </table>
@@ -385,7 +397,7 @@ export const MonthlyTimesheetTab: React.FC = () => {
           <div className="bg-slate-900/80 border border-slate-800/90 rounded-3xl p-8 text-center text-slate-400 space-y-2">
             <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
             <p className="text-sm font-extrabold text-white">No Shift Records Found</p>
-            <p className="text-xs text-slate-500">No entries match the selected month and filter criteria.</p>
+            <p className="text-xs text-slate-400">No entries match the selected month and filter criteria.</p>
           </div>
         ) : (
           filteredRecords.map((record) => {
@@ -418,11 +430,11 @@ export const MonthlyTimesheetTab: React.FC = () => {
 
                 <div className="flex items-center gap-3 text-xs text-slate-400 font-medium">
                   <span className="flex items-center gap-1 text-slate-300 font-bold">
-                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
                     {record.date}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
                     {record.inTime || '--:--'} - {record.outTime || '--:--'}
                   </span>
                 </div>

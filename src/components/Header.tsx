@@ -1,14 +1,19 @@
 import React from 'react';
-import { LogOut, Settings, Zap } from 'lucide-react';
+import { CloudOff, LogOut, Settings, WifiOff, Zap } from 'lucide-react';
 import { SHOP_INFO } from '../config';
 import { useAuth } from '../auth/AuthContext';
+import { useOnline } from '../hooks/useOnline';
+import { useSafeLogout, useShiftQueue } from '../offline/useShiftQueue';
 
 interface HeaderProps {
   onOpenSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
-  const { user, isManager, logout } = useAuth();
+  const { user, isManager } = useAuth();
+  const online = useOnline();
+  const safeLogout = useSafeLogout();
+  const { mine } = useShiftQueue();
 
   return (
     <header id="app-header" className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 shadow-xl">
@@ -35,6 +40,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {mine.length > 0 && (
+            <span role="status" className="flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold bg-amber-500/15 text-amber-200 border-amber-500/40" title="Shift logs saved on this device, not sent yet">
+              <CloudOff className="w-3 h-3" aria-hidden="true" /> {mine.length} unsent
+            </span>
+          )}
+          {!online && (
+            <span role="status" className="flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold bg-amber-500/15 text-amber-300 border-amber-500/40">
+              <WifiOff className="w-3 h-3" aria-hidden="true" /> Offline
+            </span>
+          )}
           {isManager && (
             <button
               id="open-settings-btn"
@@ -47,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
           )}
           <button
             id="logout-btn"
-            onClick={logout}
+            onClick={() => void safeLogout()}
             className="w-11 h-11 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-300 flex items-center justify-center transition-all active:scale-95"
             aria-label="Log out"
             title="Log out"

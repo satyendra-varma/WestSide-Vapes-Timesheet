@@ -92,4 +92,11 @@ real data without touching the live sheet:
   repo **Settings → Branches**, protect `main` and require the **CI / check** status to pass before
   merging.
 
+## 8. Install the app on the shop device (after step 6)
+- **Android/Chrome:** open the live site → menu → **Install app** (or **Add to Home screen**).
+- **iPhone/Safari:** Share → **Add to Home Screen**.
+- If a shift is logged while the shop Wi-Fi is down, it shows under **Not sent yet** and is sent
+  automatically when the connection returns. Staff should stay logged in until that list is empty;
+  logging out asks first.
+
 _(Later phases add steps below.)_

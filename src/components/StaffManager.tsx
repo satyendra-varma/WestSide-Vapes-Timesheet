@@ -4,10 +4,12 @@ import { ApiError } from '../api/client';
 import { EmployeeInfo } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { useEmployees } from '../data/hooks';
+import { useConfirm } from './ConfirmDialog';
 
 /** Manager-only: PINs, lockouts and the active flag for everyone in the Employees tab. */
 export const StaffManager: React.FC = () => {
   const { api, user } = useAuth();
+  const confirm = useConfirm();
   const employees = useEmployees();
   const [pinFor, setPinFor] = useState<string | null>(null);
   const [newPin, setNewPin] = useState('');
@@ -80,7 +82,7 @@ export const StaffManager: React.FC = () => {
             <li key={e.name} className="py-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className={`font-bold text-sm truncate ${e.active ? 'text-white' : 'text-slate-500 line-through'}`}>{e.name}</p>
+                  <p className={`font-bold text-sm truncate ${e.active ? 'text-white' : 'text-slate-400 line-through'}`}>{e.name}</p>
                   <p className="text-[11px] text-slate-400">
                     {e.role === 'manager' ? 'Manager' : 'Staff'}
                     {' · '}{e.active ? 'Active' : 'Inactive'}
@@ -101,8 +103,16 @@ export const StaffManager: React.FC = () => {
                   </button>
                   {!isSelf && (
                     <button type="button" disabled={!!busy}
-                      onClick={() => {
-                        if (e.active && !confirm(`Deactivate ${e.name}? They will be logged out immediately and can't log in or be rostered.`)) return;
+                      onClick={async () => {
+                        if (e.active) {
+                          const ok = await confirm({
+                            title: `Deactivate ${e.name}?`,
+                            message: "They're logged out immediately and can't log in or be rostered until reactivated. Their past shifts stay.",
+                            confirmLabel: 'Deactivate',
+                            danger: true,
+                          });
+                          if (!ok) return;
+                        }
                         void run(`active:${e.name}`, () => api!.setEmployeeActive(e.name, !e.active), `${e.name} is now ${e.active ? 'inactive' : 'active'}.`);
                       }}
                       className={`w-11 h-11 rounded-lg bg-slate-800 flex items-center justify-center ${e.active ? 'text-rose-300' : 'text-emerald-300'}`}
@@ -117,7 +127,7 @@ export const StaffManager: React.FC = () => {
                 <form className="flex gap-2" onSubmit={(ev) => { ev.preventDefault(); void savePin(e.name); }}>
                   <label htmlFor={`pin-${e.name}`} className="sr-only">New 6-digit PIN for {e.name}</label>
                   <div className="relative flex-1">
-                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
                     <input
                       id={`pin-${e.name}`}
                       type="password"

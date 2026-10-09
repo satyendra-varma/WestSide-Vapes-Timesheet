@@ -3,6 +3,23 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 5 complete (reliability + polish)
+- **Current phase:** 5 → merged into `dev`; next is Phase 6 (stock list + customer requests).
+- **Done:**
+  - 5a: confirm dialogs, accessibility pass, offline pill.
+  - 5b: offline queue for new shift logs (D-039).
+  - 5c: PWA with a static-only service worker (D-040), verified in a production build.
+  - 5d: manager audit viewer (`getAudit`).
+  - 172 tests; MORNING_CHECKLIST step 8 (install on the shop device).
+- **Next step:** Phase 6 on `phase/6-stock-requests`:
+  - Stock tab (product, low|out, noted by, date, resolved).
+  - Customer requests (name, phone validated, product, status, privacy line, tel: links, grouped by
+    product, autocomplete).
+  - Manager-only delete / purge period / export.
+  - React-state-only customer data; audit without names or phones.
+  - Time-driven purge with an `installTriggers()` owner function.
+- **Known problems:** none new.
+
 ## 2026-10-09: Phase 4 complete (data completeness)
 - **Current phase:** 4 → merged into `dev`; next is Phase 5 (reliability + polish).
 - **Done:**

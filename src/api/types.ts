@@ -51,6 +51,19 @@ export interface SaveShiftInput {
   expectedPrevious?: ShiftSlot;
 }
 
+export interface AuditEntry {
+  timestamp: string;
+  actor: string;
+  action: string;
+  target: string;
+  details: string;
+}
+
+export interface AuditPage {
+  entries: AuditEntry[];
+  total: number;
+}
+
 export interface RosterDay {
   dayName: string;
   morning: string;
