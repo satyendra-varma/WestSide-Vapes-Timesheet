@@ -3,7 +3,6 @@ import { Settings, Copy, Check, Globe, Wifi, FileCode } from 'lucide-react';
 import { checkBackend, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getApiUrlOverride, getDefaultApiUrl, setApiUrlOverride } from '../config';
-import { APPS_SCRIPT_CODE_GS } from '../utils/appsScriptTemplate';
 import { Modal } from './Modal';
 import { useConfirm } from './ConfirmDialog';
 import { useShiftQueue } from '../offline/useShiftQueue';
@@ -58,6 +57,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleCopyCodeGs = async () => {
     try {
+      // Loaded on demand so the ~60 KB backend source isn't part of every page load.
+      const { APPS_SCRIPT_CODE_GS } = await import('../utils/appsScriptTemplate');
       await navigator.clipboard.writeText(APPS_SCRIPT_CODE_GS);
       setCopiedScript(true);
       setTimeout(() => setCopiedScript(false), 3000);

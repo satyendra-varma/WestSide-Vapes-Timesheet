@@ -3,6 +3,18 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Final polish (`phase/9-final-polish`)
+- **Current phase:** none; all phases are on `dev`. This branch is docs and robustness only.
+- **Done:**
+  - cash-count date lookup tolerates hand-edited date cells (+ test);
+  - backend-code export lazy-loaded (main bundle −~20 KB gzip);
+  - README rewritten for this project;
+  - MORNING_CHECKLIST "If something goes wrong" (log everyone out, forgotten manager PIN, lockouts,
+    leavers, stop emails, rollback);
+  - D-045.
+- **Next step (owner):** `docs/MORNING_CHECKLIST.md` from step 1.
+- **Known problems:** see D-045 and the Phase 8 entry.
+
 ## 2026-10-09: Phase 8 complete: all phases done
 - **Current phase:** none. Phases 0, 1A, 1B, 3, 2, 4, 5, 6, 7 and 8 are merged into `dev` and pushed.
   `main` untouched.

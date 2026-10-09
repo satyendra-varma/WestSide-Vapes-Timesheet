@@ -110,3 +110,15 @@ describe('centsText', () => {
     expect(backend.run<string>('centsText', cents)).toBe(text);
   });
 });
+
+describe('robustness', () => {
+  it('finds a day whose date cell was hand-edited into a date value, instead of adding a second row', () => {
+    save({ '2000': 1 });
+    const sheet = backend.google.spreadsheet.getSheetByName('CashCounts')!;
+    sheet.getRange(2, 1).setNumberFormat('');
+    sheet.getRange(2, 1).setValue('10/09/2026'); // becomes a Date value, like a manual edit in Sheets
+    const day = save({ '2000': 2 }).data as CashDay;
+    expect(day.count!.totalCents).toBe(4000);
+    expect(sheet.getLastRow()).toBe(2);
+  });
+});
