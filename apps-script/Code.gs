@@ -1,213 +1,872 @@
 /**
- * WestSide Vapes - Google Apps Script backend (Code.gs)
- *
- * Paste into Google Sheets > Extensions > Apps Script and save. To update the live
- * app without changing its URL: Deploy > Manage deployments > edit (pencil) >
- * Version: New version > Deploy. (Execute as: Me, Who has access: Anyone.)
- *
- * Month tabs are named "MM-YYYY" and copied from the "Template" tab:
- *   Rows 1-2 headers, row 3 = day 1 ... row 33 = day 31
- *   A Date | B-E Morning: Name, In, Out, Hours | F-I Evening: Name, In, Out, Hours
+ * WestSide Vapes backend for Google Apps Script.
+ * GENERATED FILE - do not edit. Source: apps-script/src/*.js, regenerate with `npm run build:gas`.
+ * Paste this whole file into the Apps Script editor (Code.gs). Deploy steps: docs/MORNING_CHECKLIST.md.
  */
 
-var FIRST_DAY_ROW = 3;
-var SHIFT_COLUMNS = {
-  Morning: { name: 2, hours: 5 }, // B name, C in, D out, E hours
-  Evening: { name: 6, hours: 9 }  // F name, G in, H out, I hours
+// ---- 00_config.js ----
+/**
+ * WestSide Vapes backend (Google Apps Script, V8 runtime).
+ *
+ * All files in apps-script/src share one global scope, exactly as Apps Script loads them, and are
+ * concatenated in filename order into apps-script/Code.gs (npm run build:gas). Top-level values use
+ * `var` and functions use declarations so the Node test harness can reach them.
+ *
+ * No secrets live in this code. The token signing secret, the PIN pepper and every PIN hash are kept
+ * in Script Properties (Project Settings > Script properties) and are generated at runtime.
+ *
+ * Sheet layout and the request/response contract: docs/PROJECT.md.
+ */
+
+var API_VERSION = 2;
+
+var SHEETS = {
+  TEMPLATE: 'Template',
+  EMPLOYEES: 'Employees',
+  TIMETABLE: 'Timetable',
+  AUDIT: 'Audit'
 };
-var DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
-function getMonthSheet(ss, monthYear, createIfMissing) {
-  // monthYear expected format: "MM-YYYY" (e.g., "08-2026")
-  if (!/^(0[1-9]|1[0-2])-\d{4}$/.test(String(monthYear))) {
-    throw new Error("Invalid monthYear '" + monthYear + "', expected MM-YYYY");
+// Month tabs ("MM-YYYY"): rows 1-2 are headers, row 3 holds day 1. Each shift uses three adjacent
+// columns starting at `name`: name, in, out (Morning B-D, Evening F-H).
+var MONTH_LAYOUT = {
+  FIRST_DAY_ROW: 3,
+  SHIFTS: {
+    Morning: { name: 2 },
+    Evening: { name: 6 }
   }
-  var sheet = ss.getSheetByName(monthYear);
+};
 
-  if (!sheet && createIfMissing) {
-    // If the sheet for this month doesn't exist, duplicate the Template
-    var template = ss.getSheetByName("Template");
-    if (!template) {
-      throw new Error("Template sheet not found! Please create a tab named 'Template'.");
-    }
-    sheet = template.copyTo(ss);
-    sheet.setName(monthYear);
+var SHIFT_TYPES = ['Morning', 'Evening'];
+var DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    var protection = sheet.protect().setDescription('Protected Monthly Sheet (' + monthYear + ')');
-    protection.setWarningOnly(true);
-  }
-  return sheet;
+var ROLES = { MANAGER: 'manager', STAFF: 'staff' };
+
+var AUTH = {
+  TOKEN_TTL_MINUTES: { staff: 8 * 60, manager: 2 * 60 },
+  MAX_FAILED_PINS: 5,
+  LOCKOUT_MINUTES: 15
+};
+
+var PROP_KEYS = {
+  TOKEN_SECRET: 'TOKEN_SECRET',
+  PIN_PEPPER: 'PIN_PEPPER',
+  USER_PREFIX: 'auth.user.',
+  SETUP_MANAGER_NAME: 'SETUP_MANAGER_NAME',
+  SETUP_MANAGER_PIN: 'SETUP_MANAGER_PIN'
+};
+
+var LIMITS = {
+  NAME_MAX: 60
+};
+
+// ---- 01_util.js ----
+// Pure helpers: no Apps Script services in this file.
+
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
 }
 
-function doGet(e) {
+/** Display form of a person's name: trimmed, single spaces. */
+function cleanName(value) {
+  return String(value === null || value === undefined ? '' : value).trim().replace(/\s+/g, ' ');
+}
+
+/** Lookup key for a name: cleanName, lower case. */
+function normalizeName(value) {
+  return cleanName(value).toLowerCase();
+}
+
+/**
+ * "9:00", "09:00:00", "4:00 PM" -> "09:00" / "16:00". Anything else (including empty) -> "".
+ * Mirrors parseTimeToMinutes in src/utils/hours.ts (tests/parity.test.ts keeps them in step).
+ */
+function normalizeTime(value) {
+  var str = String(value === null || value === undefined ? '' : value).trim();
+  var m = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/.exec(str);
+  if (!m) return '';
+  var h = Number(m[1]);
+  var meridiem = m[3] ? m[3].toUpperCase() : '';
+  if (meridiem && (h < 1 || h > 12)) return '';
+  if (meridiem === 'PM' && h < 12) h += 12;
+  if (meridiem === 'AM' && h === 12) h = 0;
+  if (h > 23 || Number(m[2]) > 59) return '';
+  return pad2(h) + ':' + m[2];
+}
+
+function isValidMonthYear(value) {
+  return /^(0[1-9]|1[0-2])-\d{4}$/.test(String(value));
+}
+
+function daysInMonthOf(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+/** "YYYY-MM-DD" -> { year, month, day, monthYear: "MM-YYYY" } for a real calendar date, else null. */
+function parseDateStr(value) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  if (!m) return null;
+  var year = Number(m[1]);
+  var month = Number(m[2]);
+  var day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonthOf(year, month)) return null;
+  return { year: year, month: month, day: day, monthYear: m[2] + '-' + m[1] };
+}
+
+/**
+ * Text that will be written to a cell. Sheets treats a leading = + - @ as a formula; a leading
+ * apostrophe forces plain text and is not shown or returned by getValue().
+ */
+function safeCellText(value) {
+  var str = String(value === null || value === undefined ? '' : value);
+  return /^[=+\-@]/.test(str) ? "'" + str : str;
+}
+
+/** Compares two strings without stopping at the first difference (signatures are fixed-length hex). */
+function constantTimeEquals(a, b) {
+  a = String(a);
+  b = String(b);
+  if (a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/** Apps Script returns signed bytes (-128..127); hex-encode them. */
+function bytesToHex(bytes) {
+  var out = '';
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i] & 0xff;
+    out += (b < 16 ? '0' : '') + b.toString(16);
+  }
+  return out;
+}
+
+function isSixDigitPin(pin) {
+  return /^\d{6}$/.test(String(pin));
+}
+
+/** Rejects PINs that are trivial to guess: one repeated digit or a straight run (123456, 654321). */
+function isWeakPin(pin) {
+  var s = String(pin);
+  if (/^(\d)\1+$/.test(s)) return true;
+  var up = true;
+  var down = true;
+  for (var i = 1; i < s.length; i++) {
+    var d = Number(s[i]) - Number(s[i - 1]);
+    if (d !== 1) up = false;
+    if (d !== -1) down = false;
+  }
+  return up || down;
+}
+
+/** Blank or anything except an explicit "no" counts as active, so existing rows stay usable. */
+function parseActive(value) {
+  if (value === false) return false;
+  return !/^(false|no|n|0|inactive)$/i.test(String(value === null || value === undefined ? '' : value).trim());
+}
+
+/** An error the router turns into {status:"error", code, message, ...extra}. */
+function ApiFail(code, message, extra) {
+  this.code = code;
+  this.message = message;
+  this.extra = extra || null;
+}
+
+function fail(code, message, extra) {
+  return new ApiFail(code, message, extra);
+}
+
+// ---- 02_services.js ----
+// Thin wrappers around Apps Script services, kept in one place.
+
+function spreadsheet() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function sheetTimeZone() {
+  return spreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+}
+
+/** Today's date in the spreadsheet's time zone, "YYYY-MM-DD". */
+function todayStr() {
+  return Utilities.formatDate(new Date(), sheetTimeZone(), 'yyyy-MM-dd');
+}
+
+function scriptProps() {
+  return PropertiesService.getScriptProperties();
+}
+
+function hmacHex(message, key) {
+  return bytesToHex(Utilities.computeHmacSha256Signature(String(message), String(key)));
+}
+
+/** 64 hex characters from two random UUIDs (about 244 random bits). */
+function randomSecret() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+}
+
+/** Reads a secret, creating it on first use. Only call this while holding the script lock. */
+function getOrCreateSecret(key) {
+  var props = scriptProps();
+  var value = props.getProperty(key);
+  if (!value) {
+    value = randomSecret();
+    props.setProperty(key, value);
+  }
+  return value;
+}
+
+/** Per-employee auth state: { salt, hash, failed, lockedUntil (ms), tv (token version) }. */
+function getAuthRecord(nameKey) {
+  var raw = scriptProps().getProperty(PROP_KEYS.USER_PREFIX + nameKey);
+  var rec = null;
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var action = (e && e.parameter) ? e.parameter.action : null;
-
-    if (action === "getEmployees") {
-      var sheet = ss.getSheetByName("Employees");
-      if (!sheet) return responseJSON([]);
-      var lastRow = sheet.getLastRow();
-      if (lastRow < 2) return responseJSON([]);
-      var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      var employees = data.flat().filter(String);
-      return responseJSON(employees);
-
-    } else if (action === "getTimesheet") {
-      var monthYear = e.parameter.monthYear; // e.g., "08-2026"
-      if (!monthYear) return responseJSON({ status: "error", message: "Missing monthYear parameter" });
-      // Read-only: browsing a month that has no tab yet must not create one.
-      var sheet = getMonthSheet(ss, monthYear, false);
-      if (!sheet) return responseJSON([]);
-      // Display values return times exactly as the sheet shows them ("09:00"),
-      // so neither the browser's nor the spreadsheet's time zone can shift them.
-      return responseJSON(sheet.getDataRange().getDisplayValues());
-
-    } else if (action === "getTimetable") {
-      var sheet = ss.getSheetByName("Timetable");
-      if (!sheet) return responseJSON([]);
-      var data = sheet.getDataRange().getValues();
-      return responseJSON(data);
-    }
-    return responseJSON({ status: "error", message: "Invalid or missing action parameter" });
-  } catch (err) {
-    return responseJSON({ status: "error", message: err.toString() });
+    rec = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    rec = null;
   }
+  rec = rec || {};
+  return {
+    salt: rec.salt || '',
+    hash: rec.hash || '',
+    failed: Number(rec.failed) || 0,
+    lockedUntil: Number(rec.lockedUntil) || 0,
+    tv: Number(rec.tv) || 0
+  };
 }
 
-function doPost(e) {
+function saveAuthRecord(nameKey, rec) {
+  scriptProps().setProperty(PROP_KEYS.USER_PREFIX + nameKey, JSON.stringify(rec));
+}
+
+function withScriptLock(fn) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000); // wait up to 10 seconds for concurrent requests
-  } catch (lockErr) {
-    return responseJSON({ status: "error", message: "Server busy, please try again in a moment." });
+    lock.waitLock(10000);
+  } catch (e) {
+    throw fail('busy', 'Server busy, please try again in a moment.');
   }
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var data = JSON.parse(e.postData.contents);
-
-    if (data.action === "updateTimetable") {
-      return responseJSON(updateTimetable(ss, data.timetable));
-    }
-    return responseJSON(saveShift(ss, data));
-  } catch (err) {
-    return responseJSON({ status: "error", message: err.toString() });
+    return fn();
   } finally {
     lock.releaseLock();
   }
 }
 
-// Payload: { monthYear: "08-2026", date: 1-31, shift: "Morning"/"Evening", name: "John",
-//            inTime: "09:00", outTime: "16:00", force: true/false }
-// Empty name/inTime/outTime clears the slot (used for deletes).
-function saveShift(ss, data) {
-  var cols = SHIFT_COLUMNS[data.shift];
-  if (!cols) throw new Error("Invalid shift '" + data.shift + "'");
+// ---- 03_audit.js ----
+// Audit tab: Timestamp | Actor | Action | Target | Details.
+// Never write PINs, tokens, or customer names/phone numbers here.
 
-  var sheet = getMonthSheet(ss, data.monthYear, true);
-  var parts = data.monthYear.split("-"); // ["08", "2026"]
-  var daysInMonth = new Date(Number(parts[1]), Number(parts[0]), 0).getDate();
-  var day = Number(data.date);
-  if (!(day >= 1 && day <= daysInMonth)) {
-    throw new Error("Invalid date " + data.date + " for " + data.monthYear);
+var AUDIT_HEADER = ['Timestamp', 'Actor', 'Action', 'Target', 'Details'];
+
+function auditSheet() {
+  var ss = spreadsheet();
+  var sheet = ss.getSheetByName(SHEETS.AUDIT);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEETS.AUDIT);
+    sheet.appendRow(AUDIT_HEADER);
   }
+  return sheet;
+}
 
-  var name = String(data.name || "").trim();
-  var inTime = normalizeTime(data.inTime);
-  var outTime = normalizeTime(data.outTime);
-  if (name && (!inTime || !outTime)) {
-    throw new Error("In and Out times are required in HH:mm format");
-  }
+function audit(actor, action, target, details) {
+  auditSheet().appendRow([
+    Utilities.formatDate(new Date(), sheetTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+    safeCellText(String(actor || '').slice(0, LIMITS.NAME_MAX)),
+    action,
+    safeCellText(String(target || '').slice(0, 80)),
+    safeCellText(String(details || '').slice(0, 300))
+  ]);
+}
 
-  // Row 3 corresponds to Date 1 (Row 1 & 2 are headers)
-  var row = FIRST_DAY_ROW + day - 1;
-  var slot = sheet.getRange(row, cols.name, 1, 3); // name, in, out
-  var existing = slot.getDisplayValues()[0];
-  var previous = {
-    name: String(existing[0]).trim(),
-    inTime: normalizeTime(existing[1]) || String(existing[1]).trim(),
-    outTime: normalizeTime(existing[2]) || String(existing[2]).trim()
+// ---- 04_employees.js ----
+// Employees tab: column A = name (row 1 is a header). Optional columns are found by their row-1
+// header, case-insensitively: "Active", "Role", "Email". Missing columns mean: active, staff, no email.
+// ensureEmployeeColumns() only ever appends missing headers after the last used column.
+
+var EMPLOYEE_OPTIONAL_COLUMNS = ['Active', 'Role'];
+
+function employeesSheet() {
+  return spreadsheet().getSheetByName(SHEETS.EMPLOYEES);
+}
+
+function employeeHeaderIndex(headerRow) {
+  var lower = headerRow.map(function (h) { return String(h).trim().toLowerCase(); });
+  return {
+    active: lower.indexOf('active'),
+    role: lower.indexOf('role'),
+    email: lower.indexOf('email')
   };
-
-  // Never silently replace a shift that's already in the sheet: the app shows
-  // both versions and resends with force: true once the user confirms.
-  var occupied = previous.name || previous.inTime || previous.outTime;
-  var unchanged = previous.name === name && previous.inTime === inTime && previous.outTime === outTime;
-  if (occupied && !unchanged && !data.force) {
-    return { status: "conflict", previousData: previous };
-  }
-
-  var dayFormatted = (day < 10 ? "0" : "") + day;
-  var fullDateStr = parts[0] + "/" + dayFormatted + "/" + parts[1]; // e.g., "08/15/2026"
-  sheet.getRange(row, 1).setValue(fullDateStr);
-
-  sheet.getRange(row, cols.name + 1, 1, 2).setNumberFormat("HH:mm");
-  slot.setValues([[name, inTime, outTime]]);
-
-  return { status: "success", previousData: previous };
 }
 
-// "9:00", "09:00:00", "4:00 PM" -> "09:00" / "16:00"; empty -> ""; unrecognised -> ""
-function normalizeTime(value) {
-  var str = String(value === null || value === undefined ? "" : value).trim();
-  var m = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/.exec(str);
-  if (!m) return "";
-  var h = Number(m[1]);
-  var meridiem = m[3] ? m[3].toUpperCase() : "";
-  if (meridiem === "PM" && h < 12) h += 12;
-  if (meridiem === "AM" && h === 12) h = 0;
-  if (h > 23 || Number(m[2]) > 59) return "";
-  return (h < 10 ? "0" : "") + h + ":" + m[2];
-}
-
-// timetable: [{ dayName: "Sunday", morning: [{ employeeName }], evening: [{ employeeName }] }, ...]
-// Writes Morning to column B and Evening to column C of the row whose column A is the day.
-function updateTimetable(ss, timetable) {
-  if (!Array.isArray(timetable)) throw new Error("Missing timetable");
-
-  var sheet = ss.getSheetByName("Timetable");
-  if (!sheet) {
-    sheet = ss.insertSheet("Timetable");
-    sheet.appendRow(["Day", "Morning", "Evening"]);
-  }
+/** All employees, in sheet order: { name, key, row, active, role, email }. */
+function readEmployees() {
+  var sheet = employeesSheet();
+  if (!sheet) return [];
   var lastRow = sheet.getLastRow();
-  var rowDays = lastRow > 0
-    ? sheet.getRange(1, 1, lastRow, 1).getDisplayValues().map(function (r) { return String(r[0]).trim().toLowerCase(); })
-    : [];
-
-  timetable.forEach(function (day) {
-    var dayName = String((day && day.dayName) || "").trim();
-    if (DAY_NAMES.indexOf(dayName.toLowerCase()) === -1) return;
-    var morning = firstEmployee(day.morning);
-    var evening = firstEmployee(day.evening);
-
-    var index = rowDays.indexOf(dayName.toLowerCase());
-    if (index === -1) {
-      sheet.appendRow([dayName, morning, evening]);
-      rowDays.push(dayName.toLowerCase());
-    } else {
-      sheet.getRange(index + 1, 2, 1, 2).setValues([[morning, evening]]);
-    }
-  });
-  return { status: "success" };
-}
-
-function firstEmployee(shifts) {
-  return Array.isArray(shifts) && shifts[0] ? String(shifts[0].employeeName || "").trim() : "";
-}
-
-// Placed at the bottom of the script
-function responseJSON(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function addEmployee(name) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Employees");
-  if (!sheet) {
-    sheet = ss.insertSheet("Employees");
-    sheet.appendRow(["Employee Name"]);
+  if (lastRow < 2) return [];
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var idx = employeeHeaderIndex(values[0]);
+  var seen = {};
+  var list = [];
+  for (var r = 1; r < values.length; r++) {
+    var name = cleanName(values[r][0]);
+    if (!name) continue;
+    var key = normalizeName(name);
+    if (seen[key]) continue; // duplicate names: the first row wins
+    seen[key] = true;
+    var roleCell = idx.role >= 0 ? String(values[r][idx.role]).trim().toLowerCase() : '';
+    list.push({
+      name: name,
+      key: key,
+      row: r + 1,
+      active: idx.active >= 0 ? parseActive(values[r][idx.active]) : true,
+      role: roleCell === ROLES.MANAGER ? ROLES.MANAGER : ROLES.STAFF,
+      email: idx.email >= 0 ? String(values[r][idx.email]).trim() : ''
+    });
   }
-  sheet.appendRow([name]);
+  return list;
+}
+
+function findEmployee(name) {
+  var key = normalizeName(name);
+  if (!key) return null;
+  var list = readEmployees();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].key === key) return list[i];
+  }
+  return null;
+}
+
+/** Appends any missing optional headers. Returns 1-based column numbers by lower-case header. */
+function ensureEmployeeColumns(headers) {
+  var sheet = employeesSheet();
+  if (!sheet) throw fail('not_found', 'The Employees tab is missing.');
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var cols = {};
+  (headers || EMPLOYEE_OPTIONAL_COLUMNS).forEach(function (title) {
+    var i = header.indexOf(title.toLowerCase());
+    if (i === -1) {
+      lastCol += 1;
+      sheet.getRange(1, lastCol).setValue(title);
+      header[lastCol - 1] = title.toLowerCase();
+      i = lastCol - 1;
+    }
+    cols[title.toLowerCase()] = i + 1;
+  });
+  return cols;
+}
+
+function setEmployeeCell(employee, title, value) {
+  var cols = ensureEmployeeColumns([title]);
+  employeesSheet().getRange(employee.row, cols[title.toLowerCase()]).setValue(value);
+}
+
+// ---- 05_auth.js ----
+// PIN login and signed session tokens (DECISIONS D-018).
+//
+// PIN hash  = HMAC-SHA256(key = PIN_PEPPER, message = salt + ":" + pin), salt random per employee.
+// Token     = payload + "." + HMAC-SHA256(key = TOKEN_SECRET, message = payload)
+//   payload = encodeURIComponent(JSON {n: name, r: role, v: token version, iat, exp}) (seconds)
+// Every request re-reads the employee (active flag, current role) and the token version, so a
+// deactivation or PIN reset takes effect on the next request.
+
+function hashPin(pin, salt, pepper) {
+  return hmacHex(salt + ':' + pin, pepper);
+}
+
+/** Sets a new PIN: new salt, clears any lockout, and bumps the token version (old sessions die). */
+function setEmployeePin(employee, pin) {
+  var rec = getAuthRecord(employee.key);
+  rec.salt = randomSecret().slice(0, 32);
+  rec.hash = hashPin(pin, rec.salt, getOrCreateSecret(PROP_KEYS.PIN_PEPPER));
+  rec.failed = 0;
+  rec.lockedUntil = 0;
+  rec.tv = rec.tv + 1;
+  saveAuthRecord(employee.key, rec);
+}
+
+function validateNewPin(pin) {
+  if (!isSixDigitPin(pin)) throw fail('invalid', 'PIN must be exactly 6 digits.', { field: 'pin' });
+  if (isWeakPin(pin)) throw fail('invalid', 'That PIN is too easy to guess. Avoid repeated digits and runs like 123456.', { field: 'pin' });
+}
+
+function issueToken(employee, rec) {
+  var nowSec = Math.floor(Date.now() / 1000);
+  var ttlMin = AUTH.TOKEN_TTL_MINUTES[employee.role] || AUTH.TOKEN_TTL_MINUTES.staff;
+  var payload = { n: employee.name, r: employee.role, v: rec.tv, iat: nowSec, exp: nowSec + ttlMin * 60 };
+  var body = encodeURIComponent(JSON.stringify(payload));
+  return {
+    token: body + '.' + hmacHex(body, getOrCreateSecret(PROP_KEYS.TOKEN_SECRET)),
+    expiresAt: payload.exp * 1000
+  };
+}
+
+/** Checks signature and expiry only. Returns the payload or throws 'unauthorized'. */
+function verifyToken(token) {
+  var denied = fail('unauthorized', 'Please log in again.');
+  if (typeof token !== 'string' || token.length > 2000) throw denied;
+  var parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) throw denied;
+  var secret = scriptProps().getProperty(PROP_KEYS.TOKEN_SECRET);
+  if (!secret) throw denied;
+  if (!constantTimeEquals(hmacHex(parts[0], secret), parts[1])) throw denied;
+  var payload;
+  try {
+    payload = JSON.parse(decodeURIComponent(parts[0]));
+  } catch (e) {
+    throw denied;
+  }
+  if (!payload || typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp) throw denied;
+  return payload;
+}
+
+/** Full per-request check. Returns the session { name, role } using the employee's current role. */
+function authenticate(token) {
+  var payload = verifyToken(token);
+  var employee = findEmployee(payload.n);
+  var denied = fail('unauthorized', 'Please log in again.');
+  if (!employee || !employee.active) throw denied;
+  var rec = getAuthRecord(employee.key);
+  if (!rec.hash || rec.tv !== payload.v) throw denied;
+  return { name: employee.name, key: employee.key, role: employee.role };
+}
+
+function actionLogin(req) {
+  var typedName = cleanName(req.name).slice(0, LIMITS.NAME_MAX);
+  var pin = String(req.pin === null || req.pin === undefined ? '' : req.pin);
+  var badCredentials = fail('invalid_credentials', 'Name or PIN is incorrect.');
+  var pepper = getOrCreateSecret(PROP_KEYS.PIN_PEPPER);
+  var employee = typedName ? findEmployee(typedName) : null;
+  var rec = employee ? getAuthRecord(employee.key) : null;
+
+  if (!employee || !employee.active || !rec.hash || !isSixDigitPin(pin)) {
+    hashPin(pin, 'no-such-user', pepper); // keep timing similar to a real check
+    audit(employee ? employee.name : '(unknown)', 'login.failed', typedName, employee && employee.active && !rec.hash ? 'no PIN set' : 'unknown, inactive or malformed');
+    throw badCredentials;
+  }
+
+  var now = Date.now();
+  if (rec.lockedUntil > now) {
+    audit(employee.name, 'login.blocked', employee.name, 'locked');
+    throw fail('locked', 'Too many wrong PINs. Try again later or ask the manager to unlock.', {
+      retryAfterMinutes: Math.ceil((rec.lockedUntil - now) / 60000)
+    });
+  }
+
+  if (!constantTimeEquals(hashPin(pin, rec.salt, pepper), rec.hash)) {
+    rec.failed += 1;
+    if (rec.failed >= AUTH.MAX_FAILED_PINS) {
+      rec.failed = 0;
+      rec.lockedUntil = now + AUTH.LOCKOUT_MINUTES * 60000;
+      saveAuthRecord(employee.key, rec);
+      audit(employee.name, 'login.locked', employee.name, AUTH.MAX_FAILED_PINS + ' wrong PINs, locked ' + AUTH.LOCKOUT_MINUTES + ' min');
+      throw fail('locked', 'Too many wrong PINs. Try again later or ask the manager to unlock.', {
+        retryAfterMinutes: AUTH.LOCKOUT_MINUTES
+      });
+    }
+    saveAuthRecord(employee.key, rec);
+    audit(employee.name, 'login.failed', employee.name, 'wrong PIN (' + rec.failed + '/' + AUTH.MAX_FAILED_PINS + ')');
+    throw badCredentials;
+  }
+
+  rec.failed = 0;
+  rec.lockedUntil = 0;
+  saveAuthRecord(employee.key, rec);
+  var issued = issueToken(employee, rec);
+  audit(employee.name, 'login.success', employee.name, employee.role);
+  return { token: issued.token, expiresAt: issued.expiresAt, user: { name: employee.name, role: employee.role } };
+}
+
+// ---- 06_timesheet.js ----
+// Month tabs "MM-YYYY", copied from "Template" on the first write of a month.
+// Row = day + 2. Morning: B name, C in, D out. Evening: F name, G in, H out.
+
+function getMonthSheet(monthYear, createIfMissing) {
+  if (!isValidMonthYear(monthYear)) throw fail('invalid', 'Invalid month.', { field: 'monthYear' });
+  var ss = spreadsheet();
+  var sheet = ss.getSheetByName(monthYear);
+  if (!sheet && createIfMissing) {
+    var template = ss.getSheetByName(SHEETS.TEMPLATE);
+    if (!template) throw fail('server_error', "The 'Template' tab is missing.");
+    sheet = template.copyTo(ss);
+    sheet.setName(monthYear);
+    sheet.protect().setDescription('Protected Monthly Sheet (' + monthYear + ')').setWarningOnly(true);
+  }
+  return sheet;
+}
+
+/** A time cell as "HH:mm": handles text, Date values and day-fraction numbers. */
+function readTimeCell(value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, sheetTimeZone(), 'HH:mm');
+  }
+  if (typeof value === 'number' && value >= 0 && value < 1) {
+    var minutes = Math.round(value * 1440) % 1440;
+    return pad2(Math.floor(minutes / 60)) + ':' + pad2(minutes % 60);
+  }
+  return normalizeTime(value) || String(value).trim();
+}
+
+function shiftColumns(shift) {
+  var layout = MONTH_LAYOUT.SHIFTS[shift];
+  if (!layout) throw fail('invalid', 'Shift must be Morning or Evening.', { field: 'shift' });
+  return layout;
+}
+
+function readSlot(sheet, day, shift) {
+  var cols = shiftColumns(shift);
+  var values = sheet.getRange(MONTH_LAYOUT.FIRST_DAY_ROW + day - 1, cols.name, 1, 3).getValues()[0];
+  return { name: cleanName(values[0]), inTime: readTimeCell(values[1]), outTime: readTimeCell(values[2]) };
+}
+
+function actionGetTimesheet(req) {
+  var monthYear = String(req.monthYear || '');
+  var sheet = getMonthSheet(monthYear, false);
+  if (!sheet) return { monthYear: monthYear, records: [] };
+  var parts = monthYear.split('-');
+  var year = Number(parts[1]);
+  var month = Number(parts[0]);
+  var days = daysInMonthOf(year, month);
+  var lastCol = Math.max(sheet.getLastColumn(), 8);
+  var values = sheet.getRange(MONTH_LAYOUT.FIRST_DAY_ROW, 1, days, lastCol).getValues();
+  var records = [];
+  for (var d = 1; d <= days; d++) {
+    var row = values[d - 1];
+    var date = parts[1] + '-' + parts[0] + '-' + pad2(d);
+    SHIFT_TYPES.forEach(function (shift) {
+      var c = MONTH_LAYOUT.SHIFTS[shift].name - 1;
+      var name = cleanName(row[c]);
+      if (!name) return;
+      records.push({ date: date, shift: shift, name: name, inTime: readTimeCell(row[c + 1]), outTime: readTimeCell(row[c + 2]) });
+    });
+  }
+  return { monthYear: monthYear, records: records };
+}
+
+function describeSlot(slot) {
+  return slot.name ? slot.name + ' ' + (slot.inTime || '--:--') + '-' + (slot.outTime || '--:--') : 'empty';
+}
+
+/**
+ * req: { date: "YYYY-MM-DD", shift, name, inTime, outTime, forceOverwrite }
+ * Staff can only log their own shifts and can't replace someone else's. Managers can do both.
+ */
+function actionSaveShift(req, session) {
+  var date = parseDateStr(req.date);
+  if (!date) throw fail('invalid', 'Invalid date.', { field: 'date' });
+  if (String(req.date) > todayStr()) throw fail('invalid', "Future dates can't be logged.", { field: 'date' });
+  shiftColumns(req.shift);
+
+  var employee = findEmployee(req.name);
+  if (!employee || !employee.active) throw fail('invalid', 'Unknown or inactive employee.', { field: 'name' });
+  var isManager = session.role === ROLES.MANAGER;
+  if (!isManager && employee.key !== session.key) throw fail('forbidden', 'You can only log your own shifts.');
+
+  var inTime = normalizeTime(req.inTime);
+  var outTime = normalizeTime(req.outTime);
+  if (!inTime) throw fail('invalid', 'In time must be HH:mm.', { field: 'inTime' });
+  if (!outTime) throw fail('invalid', 'Out time must be HH:mm.', { field: 'outTime' });
+  if (inTime === outTime) throw fail('invalid', 'Shift length is 0. Check the in and out times.', { field: 'outTime' });
+
+  var sheet = getMonthSheet(date.monthYear, true);
+  var previous = readSlot(sheet, date.day, req.shift);
+  var occupied = !!(previous.name || previous.inTime || previous.outTime);
+  var unchanged = normalizeName(previous.name) === employee.key && previous.inTime === inTime && previous.outTime === outTime;
+
+  if (occupied && !unchanged) {
+    if (req.forceOverwrite !== true) {
+      return { conflict: true, previousData: previous };
+    }
+    if (!isManager && normalizeName(previous.name) !== session.key) {
+      throw fail('forbidden', "Only a manager can replace another employee's shift.");
+    }
+  }
+
+  if (!unchanged) {
+    var row = MONTH_LAYOUT.FIRST_DAY_ROW + date.day - 1;
+    var cols = shiftColumns(req.shift);
+    sheet.getRange(row, 1).setValue(pad2(date.month) + '/' + pad2(date.day) + '/' + date.year);
+    sheet.getRange(row, cols.name + 1, 1, 2).setNumberFormat('HH:mm');
+    sheet.getRange(row, cols.name, 1, 3).setValues([[safeCellText(employee.name), inTime, outTime]]);
+    audit(session.name, occupied ? 'shift.update' : 'shift.create', req.date + ' ' + req.shift,
+      employee.name + ' ' + inTime + '-' + outTime + (occupied ? ' (was: ' + describeSlot(previous) + ')' : ''));
+  }
+  return { previousData: previous };
+}
+
+/** req: { date, shift }. Manager only (enforced by the router). */
+function actionDeleteShift(req, session) {
+  var date = parseDateStr(req.date);
+  if (!date) throw fail('invalid', 'Invalid date.', { field: 'date' });
+  var cols = shiftColumns(req.shift);
+  var sheet = getMonthSheet(date.monthYear, false);
+  if (!sheet) throw fail('not_found', 'No shifts are logged for that month.');
+  var previous = readSlot(sheet, date.day, req.shift);
+  if (!previous.name && !previous.inTime && !previous.outTime) throw fail('not_found', 'That shift is already empty.');
+  sheet.getRange(MONTH_LAYOUT.FIRST_DAY_ROW + date.day - 1, cols.name, 1, 3).setValues([['', '', '']]);
+  audit(session.name, 'shift.delete', req.date + ' ' + req.shift, 'was: ' + describeSlot(previous));
+  return { previousData: previous };
+}
+
+// ---- 07_timetable.js ----
+// Timetable tab: column A = day name (matched case-insensitively), B = Morning, C = Evening.
+// Other rows/columns are left alone.
+
+var TIMETABLE_HEADER_WORDS = ['morning', 'morning shift', 'evening', 'evening shift', 'employee', 'name'];
+
+function timetableCell(value) {
+  var name = cleanName(value);
+  return TIMETABLE_HEADER_WORDS.indexOf(name.toLowerCase()) === -1 ? name : '';
+}
+
+function actionGetTimetable() {
+  var sheet = spreadsheet().getSheetByName(SHEETS.TIMETABLE);
+  var rows = sheet && sheet.getLastRow() > 0 ? sheet.getRange(1, 1, sheet.getLastRow(), 3).getValues() : [];
+  return DAY_NAMES.map(function (dayName) {
+    var found = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (cleanName(rows[i][0]).toLowerCase() === dayName.toLowerCase()) {
+        found = rows[i];
+        break;
+      }
+    }
+    return { dayName: dayName, morning: found ? timetableCell(found[1]) : '', evening: found ? timetableCell(found[2]) : '' };
+  });
+}
+
+/** req.timetable: [{ dayName, morning, evening }]. Names must be active employees or blank. */
+function actionUpdateTimetable(req, session) {
+  if (!Array.isArray(req.timetable)) throw fail('invalid', 'Missing timetable.');
+  var ss = spreadsheet();
+  var sheet = ss.getSheetByName(SHEETS.TIMETABLE);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEETS.TIMETABLE);
+    sheet.appendRow(['Day', 'Morning', 'Evening']);
+  }
+
+  var updates = [];
+  req.timetable.forEach(function (day) {
+    var dayName = cleanName(day && day.dayName);
+    var canonical = DAY_NAMES.filter(function (d) { return d.toLowerCase() === dayName.toLowerCase(); })[0];
+    if (!canonical) throw fail('invalid', 'Unknown day: ' + dayName.slice(0, 20), { field: 'dayName' });
+    var names = [day.morning, day.evening].map(function (value) {
+      var clean = cleanName(value);
+      if (!clean) return '';
+      var employee = findEmployee(clean);
+      if (!employee || !employee.active) throw fail('invalid', 'Unknown or inactive employee on ' + canonical + '.', { field: 'name' });
+      return employee.name;
+    });
+    updates.push({ dayName: canonical, morning: names[0], evening: names[1] });
+  });
+
+  var lastRow = sheet.getLastRow();
+  var dayColumn = lastRow > 0 ? sheet.getRange(1, 1, lastRow, 1).getValues().map(function (r) { return cleanName(r[0]).toLowerCase(); }) : [];
+  var changes = [];
+  updates.forEach(function (u) {
+    var index = dayColumn.indexOf(u.dayName.toLowerCase());
+    if (index === -1) {
+      sheet.appendRow([u.dayName, safeCellText(u.morning), safeCellText(u.evening)]);
+      dayColumn.push(u.dayName.toLowerCase());
+      changes.push(u.dayName + ': ' + (u.morning || '-') + ' / ' + (u.evening || '-'));
+      return;
+    }
+    var current = sheet.getRange(index + 1, 2, 1, 2).getValues()[0].map(cleanName);
+    if (current[0] === u.morning && current[1] === u.evening) return;
+    sheet.getRange(index + 1, 2, 1, 2).setValues([[safeCellText(u.morning), safeCellText(u.evening)]]);
+    changes.push(u.dayName + ': ' + (current[0] || '-') + ' / ' + (current[1] || '-') + ' -> ' + (u.morning || '-') + ' / ' + (u.evening || '-'));
+  });
+  if (changes.length) audit(session.name, 'timetable.update', 'Timetable', changes.join('; '));
+  return actionGetTimetable();
+}
+
+// ---- 08_staff.js ----
+// Employee list and manager-only staff management (PINs, lockout, active flag).
+
+/** Staff see active names only; the manager also sees role, active, PIN and lock status. */
+function actionGetEmployees(req, session) {
+  var list = readEmployees();
+  if (session.role !== ROLES.MANAGER) {
+    return list.filter(function (e) { return e.active; }).map(function (e) { return { name: e.name, role: e.role, active: true }; });
+  }
+  var now = Date.now();
+  return list.map(function (e) {
+    var rec = getAuthRecord(e.key);
+    return {
+      name: e.name,
+      role: e.role,
+      active: e.active,
+      hasPin: !!rec.hash,
+      lockedUntil: rec.lockedUntil > now ? rec.lockedUntil : 0
+    };
+  });
+}
+
+function requireEmployee(name) {
+  var employee = findEmployee(name);
+  if (!employee) throw fail('not_found', 'No employee with that name in the Employees tab.', { field: 'name' });
+  return employee;
+}
+
+/** req: { name, pin }. Sets or resets a PIN; logs that employee out everywhere. */
+function actionSetPin(req, session) {
+  var employee = requireEmployee(req.name);
+  var pin = String(req.pin === null || req.pin === undefined ? '' : req.pin);
+  validateNewPin(pin);
+  setEmployeePin(employee, pin);
+  audit(session.name, 'pin.set', employee.name, 'PIN set or reset; existing sessions ended');
+  return { name: employee.name };
+}
+
+function actionUnlockEmployee(req, session) {
+  var employee = requireEmployee(req.name);
+  var rec = getAuthRecord(employee.key);
+  rec.failed = 0;
+  rec.lockedUntil = 0;
+  saveAuthRecord(employee.key, rec);
+  audit(session.name, 'employee.unlock', employee.name, '');
+  return { name: employee.name };
+}
+
+/** req: { name, active: boolean }. Deactivation ends the employee's sessions immediately. */
+function actionSetEmployeeActive(req, session) {
+  var employee = requireEmployee(req.name);
+  if (typeof req.active !== 'boolean') throw fail('invalid', 'active must be true or false.', { field: 'active' });
+  if (!req.active && employee.key === session.key) throw fail('invalid', "You can't deactivate yourself.");
+  setEmployeeCell(employee, 'Active', req.active ? 'TRUE' : 'FALSE');
+  if (!req.active) {
+    var rec = getAuthRecord(employee.key);
+    rec.tv += 1;
+    saveAuthRecord(employee.key, rec);
+  }
+  audit(session.name, req.active ? 'employee.activate' : 'employee.deactivate', employee.name, '');
+  return { name: employee.name, active: req.active };
+}
+
+// ---- 90_api.js ----
+// HTTP entry points. Every action is a POST with a JSON body sent as text/plain (no CORS preflight):
+//   { action, token, ...params }  ->  {status: "success", data} | {status: "error", code, message} |
+//                                     {status: "conflict", code: "conflict", previousData}
+// The only action that works without a token is "login". doGet returns no data at all; the app uses
+// it only to check that the URL points at this version of the backend.
+
+var ACTIONS = {
+  login: { auth: false, write: true, handler: actionLogin },
+  getEmployees: { auth: true, handler: actionGetEmployees },
+  getTimesheet: { auth: true, handler: actionGetTimesheet },
+  saveShift: { auth: true, write: true, handler: actionSaveShift },
+  deleteShift: { auth: true, write: true, manager: true, handler: actionDeleteShift },
+  getTimetable: { auth: true, handler: actionGetTimetable },
+  updateTimetable: { auth: true, write: true, manager: true, handler: actionUpdateTimetable },
+  setPin: { auth: true, write: true, manager: true, handler: actionSetPin },
+  unlockEmployee: { auth: true, write: true, manager: true, handler: actionUnlockEmployee },
+  setEmployeeActive: { auth: true, write: true, manager: true, handler: actionSetEmployeeActive }
+};
+
+function jsonOutput(body) {
+  body.apiVersion = API_VERSION;
+  return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet() {
+  return jsonOutput({ status: 'error', code: 'use_post', message: 'This backend only accepts POST requests.' });
+}
+
+function doPost(e) {
+  return jsonOutput(handleRequest(e && e.postData ? e.postData.contents : ''));
+}
+
+/** Pure request handling, separate from ContentService so tests can call it directly. */
+function handleRequest(rawBody) {
+  var req;
+  try {
+    req = JSON.parse(rawBody || '');
+  } catch (err) {
+    return { status: 'error', code: 'invalid', message: 'Request body must be JSON.' };
+  }
+  if (!req || typeof req !== 'object') return { status: 'error', code: 'invalid', message: 'Request body must be JSON.' };
+
+  var def = Object.prototype.hasOwnProperty.call(ACTIONS, req.action) ? ACTIONS[req.action] : null;
+  if (!def) return { status: 'error', code: 'invalid', message: 'Unknown action.' };
+
+  try {
+    var run = function () {
+      var session = null;
+      if (def.auth) {
+        session = authenticate(req.token);
+        if (def.manager && session.role !== ROLES.MANAGER) throw fail('forbidden', 'Only a manager can do that.');
+      }
+      return def.handler(req, session);
+    };
+    var result = def.write ? withScriptLock(run) : run();
+    if (result && result.conflict === true) {
+      return {
+        status: 'conflict',
+        code: 'conflict',
+        message: 'That shift is already logged with different details.',
+        previousData: result.previousData
+      };
+    }
+    return { status: 'success', data: result === undefined ? null : result };
+  } catch (err) {
+    if (err instanceof ApiFail) {
+      var body = { status: 'error', code: err.code, message: err.message };
+      if (err.extra) {
+        for (var k in err.extra) {
+          if (Object.prototype.hasOwnProperty.call(err.extra, k)) body[k] = err.extra[k];
+        }
+      }
+      return body;
+    }
+    // Unexpected failure: log the error only (never the request body, which may hold a PIN or token).
+    console.error('Unhandled error in action ' + req.action + ': ' + (err && err.message ? err.message : err));
+    return { status: 'error', code: 'server_error', message: 'Something went wrong on the server. Please try again.' };
+  }
+}
+
+// ---- 95_setup.js ----
+// One-time functions the owner runs by hand from the Apps Script editor (select the function in the
+// toolbar, then Run). See docs/MORNING_CHECKLIST.md. Nothing here is reachable over HTTP.
+
+/**
+ * Sets the first manager's PIN without ever putting it in code:
+ *   1. Project Settings > Script properties: add SETUP_MANAGER_NAME (exactly as in the Employees tab)
+ *      and SETUP_MANAGER_PIN (6 digits).
+ *   2. Run setManagerPin. It stores only a salted hash, marks that employee as manager and active,
+ *      then deletes both SETUP_ properties.
+ */
+function setManagerPin() {
+  var props = scriptProps();
+  var name = props.getProperty(PROP_KEYS.SETUP_MANAGER_NAME);
+  var pin = props.getProperty(PROP_KEYS.SETUP_MANAGER_PIN);
+  try {
+    if (!name || !pin) {
+      throw new Error('Add the script properties ' + PROP_KEYS.SETUP_MANAGER_NAME + ' and ' + PROP_KEYS.SETUP_MANAGER_PIN + ' first.');
+    }
+    return withScriptLock(function () {
+      var employee = findEmployee(name);
+      if (!employee) throw new Error('"' + cleanName(name) + '" is not in the Employees tab (column A).');
+      validateNewPin(pin);
+      setEmployeeCell(employee, 'Role', ROLES.MANAGER);
+      setEmployeeCell(employee, 'Active', 'TRUE');
+      setEmployeePin(employee, pin);
+      getOrCreateSecret(PROP_KEYS.TOKEN_SECRET);
+      audit('(setup)', 'setup.managerPin', employee.name, 'manager PIN set from the script editor');
+      Logger.log('Manager PIN set for ' + employee.name + '. The SETUP_ properties have been deleted.');
+      return employee.name;
+    });
+  } catch (err) {
+    var message = err instanceof ApiFail ? err.message : (err && err.message) || String(err);
+    Logger.log('setManagerPin failed: ' + message);
+    throw new Error(message);
+  } finally {
+    props.deleteProperty(PROP_KEYS.SETUP_MANAGER_PIN);
+    props.deleteProperty(PROP_KEYS.SETUP_MANAGER_NAME);
+  }
 }

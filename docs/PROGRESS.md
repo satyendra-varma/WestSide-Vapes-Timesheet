@@ -3,6 +3,29 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 1A complete (authentication)
+- **Current phase:** 1A → merged into `dev`; next is 1B (backend hardening).
+- **Done:**
+  - Backend rewritten as `apps-script/src/*.js` → generated `Code.gs`: PIN login, signed tokens,
+    roles, active flag, lockout, Audit tab, manager staff actions, server-side validation, staff
+    restricted to their own shifts.
+  - Node fakes + vm loader + `npm run mock` HTTP mock backend.
+  - Frontend: login gate, sessionStorage token, in-memory data store, re-login overlay that keeps
+    forms, role-gated UI, manager Settings with Staff & PINs, accessible Modal.
+  - Removed the v1 API client and the legacy HTML export.
+  - 81 tests pass.
+  - Browser walkthrough against the mock backend: see QA.md evidence.
+  - Decisions D-023 to D-034.
+- **Next step:** Phase 1B on `phase/1b-backend-hardening`:
+  - plain-text In/Out (`@` format) and reading Dates via `Utilities.formatDate`;
+  - integer-minute columns J/K + per-employee summary formulas, plus a `migrateSheets()` owner
+    function with a migration note;
+  - rename-safe validation is already in place (employee exists + active).
+- **Known problems:**
+  - Delete still uses `window.confirm` (in-app dialog in Phase 5).
+  - A network error during save says "not saved" (offline queue in Phase 5).
+  - The owner must do MORNING_CHECKLIST steps 1–6 before v2 can go live.
+
 ## 2026-10-09: Phase 0 complete (minute-based hours)
 - **Current phase:** 0 → merged into `dev`; next is 1A.
 - **Audit results:**

@@ -42,7 +42,7 @@ code review, not seen in live data. `doPost` already writes by position, so read
 too. Rows past the month's last day are ignored.
 
 ## D-004: getTimesheet returns display values; the client parses several time formats
-*2026-10-09 · Accepted · Phase 0*
+*2026-10-09 · Superseded by D-027 (v2 reads values and formats them server-side) · Phase 0*
 
 `getValues()` turns time cells into 1899-epoch Dates serialised as UTC ISO strings. The browser converts
 them back using its own historical time-zone offset, so times can shift if that offset differs from the
@@ -79,7 +79,7 @@ The app filled a missing In/Out with the default shift times (a full 7 h). Now t
 gets an amber "0h" badge, and the period summary warns before payroll.
 
 ## D-009: No preselected employee name; it clears after each submit
-*2026-10-09 · Accepted · Phase 0*
+*2026-10-09 · Superseded by D-023 (staff log under their own login) · Phase 0*
 
 Shift logging likely happens on a shared device. Defaulting to the first name in the list made it easy to
 log hours under the wrong person. A blank required choice forces a deliberate pick.
@@ -199,4 +199,110 @@ minutes. E/I stay as the owner left them.
 Components import from these files instead of doing their own arithmetic (e.g. the 12-hour warning
 uses `LONG_SHIFT_MINUTES`; the review flag uses `needsReview`). The legacy standalone HTML export has no
 hours math, so there's nothing to mirror. It's removed in Phase 1A because it can't authenticate.
+
+## D-023: Staff can only log and edit their own shifts
+*2026-10-09 · Accepted · Phase 1A (safer option; supersedes D-009)*
+
+With logins, the Log Shift name is fixed to the logged-in staff member, and the server rejects saves
+for another name (`forbidden`).
+- Staff may overwrite only their own slot. Replacing a colleague's slot, logging for others and deleting
+  shifts are manager-only.
+- Staff can still view everyone's month (unchanged behaviour; no pay data exists in the app).
+- **Why:** shifts drive payroll, so the safer default is that nobody can change someone else's hours
+  except the manager, and every change is audited.
+
+## D-024: Session token in sessionStorage; server data in memory only
+*2026-10-09 · Accepted · Phase 1A*
+
+- The token is kept in `sessionStorage`: it survives a reload of the tab but not closing it. It's removed
+  on logout and expiry.
+- Employee lists, timesheets and the roster live in an in-memory cache that's cleared on logout and
+  expiry; nothing is written to localStorage.
+- v1's localStorage caches are deleted on first load.
+- The only localStorage entry is a manager's optional server-address override (a URL, not data).
+- **Why:** shared shop devices; the owner asked that no data be cached before login and that logout and
+  expiry wipe cached data.
+
+## D-025: Backend tests run the generated `Code.gs` in a Node vm instead of module.exports guards
+*2026-10-09 · Accepted · Phase 1A (deviation from a suggested technique)*
+
+Apps Script loads every file into one shared global scope, so the backend files call each other's
+functions directly. Guarding each file with `module.exports` would need cross-file `require` shims that
+don't exist in Apps Script. Instead, `mock-backend/loadBackend.ts` evaluates the exact generated
+`Code.gs` in a `vm` context whose globals are fakes (`mock-backend/fakeGoogle.ts`), so tests exercise the
+file that ships. The single-file `Code.gs` is generated from `apps-script/src/*.js`, and a test fails if
+it's stale. `appsScriptTemplate.ts` is a `?raw` import of it, so the Settings export can't drift either.
+
+## D-026: GET returns only the API version; the app checks it before sending anything else
+*2026-10-09 · Accepted · Phase 1A*
+
+`doGet` takes no actions and returns `{status:"error", code:"use_post", apiVersion:2}`: no data, so the
+"only login is unauthenticated" rule holds. Before showing the login form, and on every response, the
+app requires `apiVersion: 2`. The old v1 script answers GET without it, so a wrong URL is caught before
+the app sends any action that the old script would misinterpret (it used to create junk tabs).
+
+## D-027: Roles and the active flag live in the Employees tab; secrets in Script Properties
+*2026-10-09 · Accepted · Phase 1A*
+
+- `Role` and `Active` are header-located columns in `Employees`, appended only if missing (additive).
+  This makes them visible to the owner.
+- PIN hashes, failure counts, lockouts, token versions, the signing secret and the pepper live in Script
+  Properties, never in the Sheet.
+- Every request re-reads the employee row and the token version, so demotion, deactivation and PIN
+  resets take effect immediately.
+- v2 reads time cells with `getValues()`: Date values are formatted with `Utilities.formatDate` in the
+  **spreadsheet's** time zone (the zone Sheets used to create them), and text is normalised. This is
+  safer than the script time zone if the two differ.
+
+## D-028: PIN rules
+*2026-10-09 · Accepted · Phase 1A (safer option)*
+
+- PINs are exactly 6 digits.
+- One repeated digit (`111111`) and straight runs (`123456`, `654321`) are rejected.
+- Hash = HMAC-SHA256(pepper, salt + ":" + pin), compared in constant time.
+- Unknown names get a dummy hash so their timing matches.
+- Wrong PIN, unknown, inactive and no-PIN logins all return the same message.
+- Lockout counts per employee; unknown names can't be locked. A deliberate lockout of someone else is
+  possible (known limit, D-018); the manager can unlock.
+
+## D-029: Owner setup through temporary Script Properties
+*2026-10-09 · Accepted · Phase 1A*
+
+`setManagerPin()` takes no arguments (the editor's Run button can't pass any). It reads
+`SETUP_MANAGER_NAME` and `SETUP_MANAGER_PIN` from Script Properties, stores only the hash, makes that
+employee manager + active, and **always** deletes both properties, even on failure, so a PIN never sits
+there in plain text.
+
+## D-030: Session lengths: staff 8 h, manager 2 h
+*2026-10-09 · Accepted · Phase 1A*
+
+These follow the owner's "staff ~8h, manager shorter". The manager's shorter session limits exposure on
+a shared device.
+
+## D-031: Legacy standalone HTML export removed
+*2026-10-09 · Accepted · Phase 1A*
+
+The Settings "Download index.html for GitHub Pages" generator couldn't authenticate. Its request format
+was already incompatible with both backends, and it was a second copy of the app to keep in step. The
+app is deployed by GitHub Actions instead.
+
+## D-032: Server-side shift validation includes "not in the future" and "not zero-length"
+*2026-10-09 · Accepted · Phase 1A*
+
+- The client already blocked these. The server now repeats the checks using the spreadsheet's time zone
+  for "today", so a modified client can't log future or empty shifts.
+- The employee must exist and be active.
+
+## D-033: No backend URL in `dev`'s config; local dev uses `.env.mock` or `VITE_APPS_SCRIPT_URL`
+*2026-10-09 · Accepted · Phase 1A*
+
+`APPS_SCRIPT_URL` in `src/config.ts` is empty on `dev`, so a build can't accidentally talk to the old
+deployment. The owner sets the new URL in the merge (MORNING_CHECKLIST step 6). `.env.mock` (committed,
+not a secret) points `npm run dev:mock` at the local mock backend.
+
+## D-034: `@types/react` added in Phase 1A instead of Phase 3
+*2026-10-09 · Accepted · Phase 1A*
+
+Without React types, every component was effectively `any`, so the 1A rewrite wouldn't have been
+type-checked. Adding them early produced no errors. Strict mode itself stays in Phase 3.
 
