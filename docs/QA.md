@@ -9,6 +9,10 @@
 
 Never commit on a failing check. Never write test data to the live sheet.
 
+## CI
+`.github/workflows/ci.yml` runs on every push and pull request to any branch: `npm ci` → `npm run lint`
+(strict tsc) → `npm run check:gas` → `npm run build` → `npm test`. A red CI run means: don't merge.
+
 ## Automated suites
 | Suite | Covers |
 |---|---|
@@ -21,6 +25,8 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/backend/hardening.test.ts` | plain-text In/Out, legacy Date reads, exact formula strings (integer minutes, no decimal hours), columns on new tabs, `migrateSheets` additive/idempotent/skip-on-conflict |
 | `tests/apiClient.test.ts` | real client ↔ real backend: transport (text/plain, token only in body), v1-backend refusal, network errors, conflicts, validation fields, unauthorized hook |
 | `tests/session.test.ts` | session only in sessionStorage, expiry, legacy purge, cache clearing, frontend/backend time-parsing parity |
+| `tests/backend/util.test.ts` | backend pure helpers: time/date/month parsing, PIN rules, formula-injection guard, constant-time compare, signed-byte hex, active flag |
+| `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
 (`mock-backend/`). Fake-clock time is 2026-10-09 13:00 America/Vancouver unless a test advances it.

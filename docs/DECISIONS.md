@@ -322,3 +322,14 @@ type-checked. Adding them early produced no errors. Strict mode itself stays in 
 - **Known:** the formulas can't be evaluated in tests (no Sheets engine). Their exact strings are
   tested, and the owner verifies them on the staging copy (MORNING_CHECKLIST step 4).
 
+## D-036: CI is a separate checks-only workflow; repo rules are enforced by tests
+*2026-10-09 · Accepted · Phase 3*
+
+- `ci.yml` runs on every branch and PR: `npm ci`, strict typecheck, bundle freshness, build, tests.
+  It has `contents: read` permissions only and no deploy steps; the owner's `deploy.yml` is untouched
+  (owner instruction).
+- `tsconfig` is `strict` (it passed with no changes needed).
+- Rules that are easy to break silently are tests (`tests/codeRules.test.ts`): no `any`, no hours
+  arithmetic outside `hours.ts`, no pay logic, no app data in localStorage, no console logging.
+- Unused AI Studio dependencies were removed to cut install size and supply-chain surface.
+
