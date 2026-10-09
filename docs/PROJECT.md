@@ -1,7 +1,7 @@
 # Project reference
 
-Describes the code as of 2026-10-09, including the Phase 0 changes (see `PROGRESS.md` for what is
-committed and deployed).
+Describes the code on `dev`; it's updated as phases merge. `main` is the live site and lags behind
+until the owner merges. See `PROGRESS.md` for status.
 
 ## What it is
 A mobile-first web app for staff at WestSide Vapes, Kerrisdale:
