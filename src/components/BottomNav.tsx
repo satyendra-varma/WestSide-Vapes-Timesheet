@@ -1,7 +1,7 @@
 import React from 'react';
-import { Clock, Calendar, Users } from 'lucide-react';
+import { Clock, Calendar, Users, Package } from 'lucide-react';
 
-export type TabType = 'logging' | 'monthly' | 'timetable';
+export type TabType = 'logging' | 'monthly' | 'timetable' | 'stock';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -10,9 +10,10 @@ interface BottomNavProps {
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'logging', label: 'Log Shift', icon: Clock },
+    { id: 'logging', label: 'Log', icon: Clock },
     { id: 'monthly', label: 'Timesheet', icon: Calendar },
-    { id: 'timetable', label: 'Timetable', icon: Users },
+    { id: 'timetable', label: 'Roster', icon: Users },
+    { id: 'stock', label: 'Stock', icon: Package },
   ];
 
   return (
@@ -27,7 +28,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
               id={`nav-tab-${tab.id}`}
               onClick={() => onTabChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              className={`min-h-11 flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all duration-200 active:scale-95 ${
+              className={`min-h-11 flex-1 flex flex-col items-center gap-1 py-1 px-1 rounded-xl transition-all duration-200 active:scale-95 ${
                 isActive
                   ? 'text-emerald-400 font-extrabold'
                   : 'text-slate-400 hover:text-slate-200 font-medium'

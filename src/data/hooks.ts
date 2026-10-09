@@ -1,10 +1,11 @@
-import { EmployeeInfo, RosterDay, TimesheetResult } from '../api/types';
+import { EmployeeInfo, RosterDay, StockItem, TimesheetResult } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ShiftRecord } from '../types';
 import { Resource, useResource } from './store';
 
 export const EMPLOYEES_KEY = 'employees';
 export const TIMETABLE_KEY = 'timetable';
+export const STOCK_KEY = 'stock';
 export const timesheetKey = (monthYear: string): string => `timesheet:${monthYear}`;
 
 /** "2026-10" (month input value) -> "10-2026" (backend month tab name). */
@@ -32,6 +33,12 @@ export function useEmployees(): Resource<EmployeeInfo[]> {
 export function useTimetable(): Resource<RosterDay[]> {
   const { api } = useAuth();
   return useResource(api ? TIMETABLE_KEY : null, () => api!.getTimetable());
+}
+
+/** Stock list (no customer data, so it may use the session cache). */
+export function useStock(): Resource<StockItem[]> {
+  const { api } = useAuth();
+  return useResource(api ? STOCK_KEY : null, () => api!.getStock());
 }
 
 export function useTimesheet(monthYear: string): Resource<ShiftRecord[]> {

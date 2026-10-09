@@ -64,6 +64,34 @@ export interface AuditPage {
   total: number;
 }
 
+export type StockStatus = 'low' | 'out';
+
+export interface StockItem {
+  id: string;
+  product: string;
+  status: StockStatus;
+  notedBy: string;
+  notedAt: string;
+  resolved: boolean;
+  resolvedBy: string;
+  resolvedAt: string;
+}
+
+export type RequestStatus = 'open' | 'contacted' | 'fulfilled';
+
+/** Customer data: keep in React state only (DECISIONS D-016). */
+export interface CustomerRequest {
+  id: string;
+  createdAt: string;
+  customerName: string;
+  phone: string;
+  product: string;
+  status: RequestStatus;
+  statusChangedAt: string;
+  statusChangedBy: string;
+  createdBy: string;
+}
+
 export interface RosterDay {
   dayName: string;
   morning: string;

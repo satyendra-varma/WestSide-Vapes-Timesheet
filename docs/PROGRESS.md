@@ -3,6 +3,22 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 6 complete (stock list + customer requests)
+- **Current phase:** 6 → merged into `dev`; next is Phase 7 (end-of-day cash count).
+- **Done:**
+  - `Stock` and `Requests` tabs (additive) with plain-text cells.
+  - Stock list and customer requests with the access rules in D-041.
+  - Daily purge trigger + `installTriggers()`.
+  - New Stock tab in the app (Low / out | Customer requests).
+  - Customer data kept in component state only and dropped on expiry/logout (browser-verified).
+  - Manager purge period + CSV export.
+  - 208 tests.
+- **Next step:** Phase 7 on `phase/7-cash-count`:
+  - Canadian denominations; live total in integer cents; configurable target float; difference;
+  - one count per day; edits audited;
+  - manager history, staff add today's count.
+- **Known problems:** none new.
+
 ## 2026-10-09: Phase 5 complete (reliability + polish)
 - **Current phase:** 5 → merged into `dev`; next is Phase 6 (stock list + customer requests).
 - **Done:**

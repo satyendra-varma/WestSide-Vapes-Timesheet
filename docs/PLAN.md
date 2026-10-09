@@ -111,13 +111,18 @@ window events are used).
 - [x] Tests: queue (10), PWA (15), audit (5): 172 total
 
 ## Phase 6: Stock list + customer requests (`phase/6-stock-requests`)
-- [ ] Stock list: product, low|out, noted by, date, resolved tick
-- [ ] Customer requests: name, phone (validated), product, date, open|contacted|fulfilled; privacy line;
-      tel: links; grouped by product; product autocomplete
-- [ ] Manager-only: delete, purge period, export. Customer data in React state only; never in
-      errors or audit text.
-- [ ] Time-driven purge of fulfilled requests after N days, logged by count only
-- [ ] **(owner)** Install triggers (MORNING_CHECKLIST)
+Audit (2026-10-09): new feature, nothing existed. Requires 1A (done).
+- [x] Stock list: product, low|out, noted by, date, resolved tick (re-reporting updates; reopen)
+- [x] Customer requests: name, phone (validated, NANP), product, date, open|contacted|fulfilled; privacy
+      line; tel: links; grouped by product; product autocomplete; no automatic stock matching
+- [x] Any staff: view, create, update status. Manager-only: delete, purge period, export (CSV with
+      injection guard)
+- [x] Customer data in React state only, dropped on logout/expiry; never in storage, cache, the
+      service worker, logs, errors or audit text (tests + code rule)
+- [x] Time-driven purge of fulfilled requests after N days (`purgeFulfilledRequests`), count-only
+      audit; `installTriggers()` owner function
+- [x] Tests: 23 backend + 11 client/rules (208 total)
+- [ ] **(owner)** Run `installTriggers` once (MORNING_CHECKLIST step 5b)
 
 ## Phase 7: End-of-day cash count (`phase/7-cash-count`)
 - [ ] Canadian denominations, live total in integer cents, configurable target float, difference

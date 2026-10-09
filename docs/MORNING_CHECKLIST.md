@@ -75,6 +75,12 @@ real data without touching the live sheet:
 4. Set every staff member's PIN from the app (run it locally as in step 4.5, but with the *new real*
    URL). Tell each person their PIN in person.
 
+## 5b. Install the scheduled job (Phase 6)
+In the **real** project's Apps Script editor, choose `installTriggers` → **Run** (approve permissions).
+It creates one daily trigger, `purgeFulfilledRequests`, which deletes fulfilled customer requests after
+the purge period (default 30 days; managers can change it in the app under Stock → Customer requests).
+Re-running it is safe. Check **Triggers** (alarm-clock icon) to see it.
+
 ## 6. Merge to the live site
 1. On `dev`, open `src/config.ts` and set `APPS_SCRIPT_URL` to the **new real** URL from step 5.3.
    Commit that one-line change. Never use the old URL: the new app refuses it anyway.

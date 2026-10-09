@@ -18,6 +18,8 @@ function filesUnder(dir: string, exts: string[]): string[] {
 
 const rel = (f: string) => relative(ROOT, f).replace(/\\/g, '/');
 const read = (f: string) => readFileSync(f, 'utf8');
+/** Source without comments (rules apply to code; comments may name the APIs they promise not to use). */
+const withoutComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 /** Drops Tailwind opacity classes like "border-emerald-500/60", which look like division by 60. */
 const withoutCssClasses = (src: string) => src.replace(/[a-z]+(?:-[a-z]+)*-\d{2,3}\/\d{1,3}\b/g, '');
 
@@ -50,6 +52,15 @@ describe('code rules', () => {
     expect(read(join(ROOT, 'src/offline/shiftQueue.ts'))).toContain("export const QUEUE_KEY = 'wsv_shift_queue';");
     const calls = read(join(ROOT, 'src/config.ts')).match(/localStorage\??\.setItem\([^,]+,/g);
     expect(calls).toEqual(['localStorage?.setItem(API_URL_OVERRIDE_KEY,']);
+  });
+
+  it('customer data never touches storage, the shared cache or logs (DECISIONS D-016)', () => {
+    const customerFiles = appFiles.filter((f) => /customerName/.test(read(f)) && !rel(f).startsWith('src/api/'));
+    expect(customerFiles.map(rel).sort()).toEqual(['src/components/CustomerRequests.tsx', 'src/utils/csv.ts']);
+    for (const f of customerFiles) {
+      expect(withoutComments(read(f)), rel(f)).not.toMatch(/localStorage|sessionStorage|writeCache|useResource|console\./);
+    }
+    expect(withoutComments(read(join(ROOT, 'src/offline/shiftQueue.ts')))).not.toMatch(/customer|phone/i);
   });
 
   it('no console.log/info/debug in the app (they could leak request data)', () => {
