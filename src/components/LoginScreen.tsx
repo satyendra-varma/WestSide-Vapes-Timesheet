@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { KeyRound, Lock, LogIn, RefreshCw, ServerCrash, User, Zap } from 'lucide-react';
 import { ApiError, checkBackend } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useSafeLogout } from '../offline/useShiftQueue';
 import { SHOP_INFO, getApiUrlOverride, setApiUrlOverride } from '../config';
 
 interface LoginScreenProps {
@@ -23,7 +24,8 @@ function messageFor(err: unknown): string {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ expiredFor }) => {
-  const { login, logout } = useAuth();
+  const { login } = useAuth();
+  const safeLogout = useSafeLogout();
   const [name, setName] = useState(expiredFor ?? '');
   const [pin, setPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -178,7 +180,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ expiredFor }) => {
         </button>
 
         {expiredFor && (
-          <button type="button" onClick={logout} className="w-full min-h-11 text-xs font-bold text-slate-400 hover:text-white">
+          <button type="button" onClick={() => void safeLogout()} className="w-full min-h-11 text-xs font-bold text-slate-400 hover:text-white">
             Not {expiredFor}? Log out
           </button>
         )}

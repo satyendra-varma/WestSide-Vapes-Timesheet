@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ConfirmProvider } from './components/ConfirmDialog';
 import { purgeLegacyStorage } from './auth/session';
 import { SHOP_INFO } from './config';
+import { useQueueRunner } from './offline/useShiftQueue';
 
 export default function App() {
   useEffect(() => {
@@ -43,13 +44,15 @@ const MainApp: React.FC = () => {
   const { isManager } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('logging');
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  // Sends shift logs that were saved on this device while offline.
+  const sendQueued = useQueueRunner();
 
   return (
     <div id="app-root-container" className="min-h-screen bg-[#090d16] text-slate-100 font-sans antialiased selection:bg-emerald-500/30 selection:text-emerald-300 pb-28">
       <Header onOpenSettings={() => setSettingsOpen(true)} />
 
       <main className="max-w-md mx-auto px-4 pt-5 pb-8">
-        {activeTab === 'logging' && <ShiftLoggingTab />}
+        {activeTab === 'logging' && <ShiftLoggingTab onSendQueued={sendQueued} />}
         {activeTab === 'monthly' && <MonthlyTimesheetTab />}
         {activeTab === 'timetable' && <TimetableTab />}
       </main>

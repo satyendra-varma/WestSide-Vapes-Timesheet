@@ -43,9 +43,11 @@ describe('code rules', () => {
     expect(offenders.map(rel)).toEqual([]);
   });
 
-  it('the app writes nothing to localStorage except the server-address override', () => {
+  it('the app writes to localStorage only the server-address override and the offline shift queue', () => {
     const writers = appFiles.filter((f) => /localStorage\??\.setItem\(/.test(read(f))).map(rel);
     expect(writers).toEqual(['src/config.ts']);
+    // The queue writes through an injected storage object, never through a direct localStorage call.
+    expect(read(join(ROOT, 'src/offline/shiftQueue.ts'))).toContain("export const QUEUE_KEY = 'wsv_shift_queue';");
     const calls = read(join(ROOT, 'src/config.ts')).match(/localStorage\??\.setItem\([^,]+,/g);
     expect(calls).toEqual(['localStorage?.setItem(API_URL_OVERRIDE_KEY,']);
   });

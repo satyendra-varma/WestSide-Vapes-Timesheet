@@ -7,11 +7,18 @@ import { useAuth } from '../auth/AuthContext';
 import { useEmployees, timesheetKey } from '../data/hooks';
 import { invalidateCache } from '../data/store';
 import { ConflictModal } from './ConflictModal';
+import { PendingShifts } from './PendingShifts';
+import { enqueueShift } from '../offline/shiftQueue';
 import { LONG_SHIFT_MINUTES, formatDecimalHours, formatDuration, isOvernight, shiftMinutes } from '../utils/hours';
 
-type Toast = { type: 'success' | 'error'; text: string };
+type Toast = { type: 'success' | 'error' | 'queued'; text: string };
 
-export const ShiftLoggingTab: React.FC = () => {
+interface ShiftLoggingTabProps {
+  /** Sends shifts saved on this device while offline. */
+  onSendQueued: () => Promise<void>;
+}
+
+export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onSendQueued }) => {
   const { user, isManager, api } = useAuth();
   const todayStr = getTodayDateString();
   const employees = useEmployees();
@@ -75,6 +82,19 @@ export const ShiftLoggingTab: React.FC = () => {
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conflict' && err.details.previousData) {
         setPreviousSlot(err.details.previousData);
+      } else if (!forceOverwrite && user && err instanceof ApiError && (err.code === 'network' || err.code === 'busy')) {
+        // No connection (or server busy): keep the shift on this device and send it later.
+        setPreviousSlot(null);
+        try {
+          enqueueShift(user.name, { date: shiftDate, shift: shiftType, name: employeeName, inTime, outTime });
+          setToastMessage({
+            type: 'queued',
+            text: `${err.code === 'network' ? 'No connection.' : 'The server is busy.'} This shift is saved on this device and will be sent automatically. Don't log out until it's sent.`,
+          });
+          if (isManager) setChosenEmployee('');
+        } catch (queueErr) {
+          setToastMessage({ type: 'error', text: `Not saved. ${queueErr instanceof Error ? queueErr.message : 'Please try again.'}` });
+        }
       } else {
         setPreviousSlot(null);
         if (!(err instanceof ApiError && err.code === 'unauthorized')) {
@@ -96,7 +116,9 @@ export const ShiftLoggingTab: React.FC = () => {
           className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 shadow-lg ${
             toastMessage.type === 'success'
               ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-              : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+              : toastMessage.type === 'queued'
+                ? 'bg-amber-500/15 text-amber-200 border-amber-500/40'
+                : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
           }`}
         >
           {toastMessage.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
@@ -106,6 +128,8 @@ export const ShiftLoggingTab: React.FC = () => {
           </button>
         </div>
       )}
+
+      <PendingShifts onSendNow={onSendQueued} />
 
       <div className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-5 space-y-6 shadow-2xl shadow-slate-950">
 

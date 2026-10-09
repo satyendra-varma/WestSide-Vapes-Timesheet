@@ -6,6 +6,7 @@ import { getApiUrlOverride, getDefaultApiUrl, setApiUrlOverride } from '../confi
 import { APPS_SCRIPT_CODE_GS } from '../utils/appsScriptTemplate';
 import { Modal } from './Modal';
 import { useConfirm } from './ConfirmDialog';
+import { useShiftQueue } from '../offline/useShiftQueue';
 import { StaffManager } from './StaffManager';
 
 interface SettingsModalProps {
@@ -17,6 +18,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { logout } = useAuth();
   const confirm = useConfirm();
+  const { mine: unsent } = useShiftQueue();
   const [scriptUrl, setScriptUrl] = useState<string>(getApiUrlOverride());
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
   const [testingUrl, setTestingUrl] = useState<boolean>(false);
@@ -42,6 +44,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const handleSaveUrl = async () => {
     const next = scriptUrl.trim();
     if (next === getApiUrlOverride()) return;
+    if (unsent.length > 0) {
+      setTestResult({ success: false, message: 'Send or discard the unsent shifts on the Log Shift tab before switching servers.' });
+      return;
+    }
     const ok = await confirm({ title: 'Switch server?', message: 'Switching servers logs you out on this device.', confirmLabel: 'Switch & log out' });
     if (!ok) return;
     setApiUrlOverride(next || null);

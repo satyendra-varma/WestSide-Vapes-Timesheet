@@ -11,7 +11,17 @@ Current phase / Done / Next step / Known problems.
     `aria-pressed` / `aria-current` / labels.
   - `text-slate-500` → `text-slate-400` for WCAG AA contrast.
   - Offline pill in the header.
-- **Next step:** 5b offline queue for shift logs; 5c PWA; 5d manager audit viewer.
+- **Done (5b):** offline queue for new shift logs (`src/offline/`).
+  - Queued on network/busy errors.
+  - Auto-sent on login, when back online, and every 30 s; Send now; Discard with confirm.
+  - Failed items show their reason.
+  - Header "N unsent" pill; logout warns before deleting unsent items; server switch blocked while
+    items are pending.
+  - 10 queue tests.
+  - Browser-verified against the mock backend (queue, warn, reconnect, send, shows in Timesheet).
+  - D-039.
+- **Next step:** 5c PWA (manifest, icons, service worker for same-origin static assets only + tests);
+  5d manager audit viewer.
 - **Known problems:** none new.
 
 ## 2026-10-09: Phase 4 complete (data completeness)
