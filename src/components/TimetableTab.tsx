@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Sun, Moon, Edit3, RefreshCw, Check, X, Sparkles } from 'lucide-react';
 import { fetchTimetable, updateTimetableLocal, fetchEmployees, getCachedTimetable, getCachedEmployees } from '../services/api';
 import { DaySchedule } from '../types';
+import { SHOP_INFO } from '../config';
 
 export const TimetableTab: React.FC = () => {
   const [timetable, setTimetable] = useState<DaySchedule[]>(() => getCachedTimetable());
@@ -14,6 +15,7 @@ export const TimetableTab: React.FC = () => {
   const [editMorningEmp, setEditMorningEmp] = useState<string>('');
   const [editEveningEmp, setEditEveningEmp] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Determine current day of week (e.g. 'Sunday', 'Monday')
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -57,6 +59,7 @@ export const TimetableTab: React.FC = () => {
 
   const openDayEdit = (day: DaySchedule) => {
     setEditingDay(day);
+    setSaveError(null);
     setEditMorningEmp(day.morning[0]?.employeeName || '');
     setEditEveningEmp(day.evening[0]?.employeeName || '');
   };
@@ -76,7 +79,11 @@ export const TimetableTab: React.FC = () => {
     });
 
     try {
-      await updateTimetableLocal(updatedTimetable);
+      const result = await updateTimetableLocal(updatedTimetable);
+      if (!result.success) {
+        setSaveError(result.message || 'Roster was not saved.');
+        return;
+      }
       setTimetable(updatedTimetable);
       setEditingDay(null);
     } catch (err) {
@@ -159,7 +166,7 @@ export const TimetableTab: React.FC = () => {
                   <div className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-3 space-y-1">
                     <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-[10px] uppercase tracking-wider">
                       <Sun className="w-3.5 h-3.5" />
-                      Morning (09:00 - 16:00)
+                      Morning ({SHOP_INFO.morningShift.defaultIn} - {SHOP_INFO.morningShift.defaultOut})
                     </div>
                     <p className="font-black text-white text-sm tracking-tight truncate">
                       {morningEmp}
@@ -170,7 +177,7 @@ export const TimetableTab: React.FC = () => {
                   <div className="bg-slate-950/90 border border-cyan-500/30 rounded-xl p-3 space-y-1">
                     <div className="flex items-center gap-1.5 text-cyan-400 font-extrabold text-[10px] uppercase tracking-wider">
                       <Moon className="w-3.5 h-3.5" />
-                      Evening (16:00 - 23:00)
+                      Evening ({SHOP_INFO.eveningShift.defaultIn} - {SHOP_INFO.eveningShift.defaultOut})
                     </div>
                     <p className="font-black text-white text-sm tracking-tight truncate">
                       {eveningEmp}
@@ -237,6 +244,12 @@ export const TimetableTab: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {saveError && (
+              <p className="text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/40 rounded-xl px-3 py-2">
+                {saveError}
+              </p>
+            )}
 
             <div className="flex gap-3 pt-2">
               <button

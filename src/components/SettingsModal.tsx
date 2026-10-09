@@ -160,8 +160,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-1">
               <li>In Google Sheets, go to <b>Extensions &gt; Apps Script</b>.</li>
               <li>Replace existing code with copied snippet and click Save.</li>
-              <li>Click <b>Deploy &gt; New deployment</b>.</li>
-              <li>Select <b>Web app</b>, Execute as: <b>Me</b>, Who has access: <b>Anyone</b>.</li>
+              <li>Updating? <b>Deploy &gt; Manage deployments</b>, edit, Version: <b>New version</b>, Deploy. The URL stays the same.</li>
+              <li>First time? <b>Deploy &gt; New deployment</b>, select <b>Web app</b>, Execute as: <b>Me</b>, Who has access: <b>Anyone</b>.</li>
               <li>Copy the Web App URL and paste above!</li>
             </ol>
           </div>

@@ -17,12 +17,9 @@ export const SHOP_INFO = {
   },
 };
 
-export const INITIAL_EMPLOYEES = [
-  "Satyendra",
-  "Kunal",
-  "Kandarp",
-  "Kunal Guptha"
-];
+// Fallback staff list before the Employees tab has loaded. Empty on purpose:
+// real names must never ship in the bundle; the list always comes from the sheet.
+export const INITIAL_EMPLOYEES: string[] = [];
 
 // Get current date string in YYYY-MM-DD
 export function getTodayDateString(): string {
@@ -31,22 +28,4 @@ export function getTodayDateString(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-// Calculate hours between HH:mm strings
-export function calculateShiftHours(inTime: string, outTime: string): number {
-  if (!inTime || !outTime) return 0;
-  const [inH, inM] = inTime.split(':').map(Number);
-  const [outH, outM] = outTime.split(':').map(Number);
-
-  let inMinutes = inH * 60 + inM;
-  let outMinutes = outH * 60 + outM;
-
-  // Handles overnight shifts if outTime is earlier than inTime
-  if (outMinutes < inMinutes) {
-    outMinutes += 24 * 60;
-  }
-
-  const diffMinutes = outMinutes - inMinutes;
-  return Math.round((diffMinutes / 60) * 10) / 10;
 }
