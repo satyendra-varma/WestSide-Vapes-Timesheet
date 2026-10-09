@@ -1,5 +1,8 @@
 # QA
 
+> Phase 1A replaces localStorage demo mode with the mock backend (`npm run mock`); this file is
+> updated per phase.
+
 ## Before every commit
 1. `npm run lint`: must exit 0.
 2. `npm run build`: must succeed.
@@ -15,10 +18,10 @@ Never commit on a failing check. Report it with the output.
 2. In devtools, set the script URL to a demo value and seed data, then reload:
    ```js
    localStorage.setItem('westside_vapes_script_url', 'your-apps-script-url');
-   localStorage.setItem('westside_vapes_employees_data', JSON.stringify(['Satyendra','Kunal','Kandarp','Kunal Guptha']));
+   localStorage.setItem('westside_vapes_employees_data', JSON.stringify(['Alex Demo','Sam Demo','Jordan Demo']));
    localStorage.setItem('westside_vapes_timesheets_data', JSON.stringify([
-     { id:'shift_2026-10-01_Morning', employeeName:'Kunal', date:'2026-10-01', shift:'Morning', inTime:'09:00', outTime:'15:20', submittedAt:'' },
-     { id:'shift_2026-10-02_Evening', employeeName:'Kandarp', date:'2026-10-02', shift:'Evening', inTime:'', outTime:'23:00', submittedAt:'' },
+     { id:'shift_2026-10-01_Morning', employeeName:'Alex Demo', date:'2026-10-01', shift:'Morning', inTime:'09:00', outTime:'15:20', submittedAt:'' },
+     { id:'shift_2026-10-02_Evening', employeeName:'Sam Demo', date:'2026-10-02', shift:'Evening', inTime:'', outTime:'23:00', submittedAt:'' },
    ]));
    ```
 3. Note: the app fetches from the live default URL before you set demo mode. Those are GETs only.
@@ -100,7 +103,7 @@ Write checks (on **staging**, or on live only with the owner present and the ent
   - The roster writes, updates and ignores non-days.
   - `fixHoursFormulas` writes the expected formulas and skips non-month tabs.
 - **Browser, demo mode, 375 px:**
-  - Totals matched hand calculation (e.g. Kunal 1,945 min = 32h 25m; total 120h 30m).
+  - Totals matched hand calculation (e.g. one employee 1,945 min = 32h 25m; total 120h 30m).
   - Pay-period switch, flagged shift, edit flow (38h 20m → 46h), copy text, zero-length block, and the
     conflict modal all worked; no console errors.
 - **Not verified:** anything against the live or staging Apps Script after the redeploy.

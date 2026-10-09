@@ -96,15 +96,92 @@ real file with Vite `?raw`, so Settings → Copy Backend Script always matches t
 This matches the owner's "per month or 15 days". Bi-weekly support is an open question (PLAN Phase 2).
 
 ## D-012: The frontend stays compatible with the currently deployed backend
-*2026-10-09 · Accepted · Phase 0*
+*2026-10-09 · Superseded by D-020 (auth makes the v2 frontend and backend a matched pair) · Phase 0*
 
 The owner redeploys the Apps Script by hand, so frontend and backend can go live in either order. New
 request fields are ignored by the old script, and new response statuses are optional. The one known
 gap: roster save fails, visibly, until the new script is deployed.
 
 ## D-013: Workflow: phase branches, no direct pushes to `main`, docs every session
-*2026-10-09 · Accepted · Process*
+*2026-10-09 · Superseded by D-019 · Process*
 
 A push to `main` deploys to GitHub Pages. So: one phase per branch, audit then owner approval before
 editing, lint + build (+ tests) before every commit, PRs merged by the owner, and PROGRESS/PLAN/DECISIONS
 updated at the end of every session. Details in `CLAUDE.md`.
+
+## D-014: The app never calculates pay
+*2026-10-09 · Accepted · Owner instruction*
+
+No hourly rates, wages or money derived from hours anywhere: frontend, backend, sheet formulas, exports
+or tests. The app reports exact time worked (integer minutes, D-001). Payroll is done outside the app.
+This keeps wage data out of a system that staff can log into and avoids a second place where pay could
+be miscalculated. The only money feature is the end-of-day cash count (D-015).
+
+## D-015: Money is stored and summed as integer cents
+*2026-10-09 · Accepted · Owner instruction*
+
+Cash-count amounts are integers in cents (e.g. 2 × $20 = 4000). They're formatted as dollars only for
+display. Floats are never used for money; this is the same reasoning as D-001.
+
+## D-016: Customer data is minimal, never cached in the browser, and purged
+*2026-10-09 · Accepted · Owner instruction*
+
+Customer requests store only name, phone, product, date and status.
+- In the browser, they live in React state only: never localStorage, sessionStorage, the service-worker
+  cache, or console logs. Logout clears them.
+- Names and phone numbers never appear in error messages or audit text.
+- Fulfilled requests are deleted after a configurable number of days by a time-driven trigger; the purge
+  is logged by count only.
+- Staff don't get a CSV export of customer data.
+
+## D-017: Reminders are email only
+*2026-10-09 · Accepted · Owner instruction*
+
+Missed-shift-log reminders use Apps Script `MailApp` (free quota) to the employee's email in the
+`Employees` tab. No SMS and no paid services.
+
+## D-018: Authentication is name + 6-digit PIN with HMAC-signed tokens
+*2026-10-09 · Accepted · Owner instruction*
+
+**Why:** the frontend is static (GitHub Pages) with no server of its own, the staff is small, and Google
+accounts for everyone are impractical. A PIN login checked by Apps Script, which returns a short-lived
+HMAC-SHA256-signed token, needs no extra infrastructure.
+
+**Design:**
+- PINs are stored only as salted (and peppered) hashes in Script Properties.
+- The signing secret is in Script Properties.
+- Every request re-checks the token signature, expiry, the employee's active flag and a per-employee
+  token version, so deactivation and PIN resets take effect immediately.
+- Lockout: 5 failed PINs locks that employee for 15 minutes.
+
+**Known limits:**
+- A 6-digit PIN (10⁶ combinations) relies on the lockout.
+- Lockout lets someone deliberately lock an employee out; the manager can unlock.
+- Anyone with edit access to the Sheet or the script bypasses all of this.
+
+Google Sign-In for the manager is a possible later upgrade.
+
+## D-019: Unattended workflow with a `dev` integration branch
+*2026-10-09 · Accepted · Process (supersedes D-013)*
+
+- `main` is the GitHub Pages deploy branch; Claude never touches it or the deploy workflow.
+- `dev` is the integration branch. Each phase is on `phase/<id>-<name>` cut from `dev` and merged
+  back locally when build and tests pass.
+- `dev` and phase branches are pushed to origin as backup.
+- In unattended runs, the phase list in `PLAN.md` is pre-approved by the owner. Ambiguities are resolved
+  toward the safer option and recorded here; owner-only actions go to `MORNING_CHECKLIST.md`.
+- `PROGRESS.md` is updated with every commit.
+
+## D-020: Auth rollout uses a new Apps Script deployment (new URL)
+*2026-10-09 · Accepted · Owner instruction*
+
+The authenticated backend is deployed as a **new** deployment with its own URL, so the live app (on
+`main`, old URL) keeps working until the owner merges. The frontend's URL changes only in that merge;
+afterwards the owner archives the old deployment.
+
+Both deployments share the same spreadsheet. The new backend's sheet changes are additive (new
+columns and tabs), so the old app keeps working during the overlap.
+
+Because the v2 frontend speaks only the v2 contract, it refuses to log in unless the backend reports
+`apiVersion: 2` (a no-data GET). This stops the new app from ever sending requests to the old script.
+

@@ -1,43 +1,33 @@
 # Progress
 
-Newest session first. Update at the end of every session: what happened, current state, next step.
+Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
+Current phase / Done / Next step / Known problems.
 
-## Current state (end of session 2, 2026-10-09)
-- **Branches:**
-  - `main` = `c739064` (pre-Phase-0); this is what GitHub Pages serves.
-  - `chore/project-docs` holds the docs commit (local only, not pushed).
-- **Phase 0 code is uncommitted in the working tree** and carries across branch switches. Files:
-  - modified: `src/components/{ConflictModal,MonthlyTimesheetTab,SettingsModal,ShiftLoggingTab,TimetableTab}.tsx`,
-    `src/config.ts`, `src/services/api.ts`, `src/types.ts`
-  - deleted (staged): `src/utils/appsScriptTemplate.ts`
-  - new: `apps-script/Code.gs`, `src/utils/hours.ts`, `src/vite-env.d.ts`
-  - untracked, not project code: `.claude/launch.json`
-- **Deployed Apps Script:** assumed to be the owner's pre-Phase-0 version (as pasted on 2026-10-09) until
-  the owner confirms a redeploy.
-- **Next step:** the owner reviews these docs. Then commit Phase 0 on `phase-0-minute-hours` (from `main`
-  after the docs branch merges, or stacked on `chore/project-docs`). The owner redeploys the Apps Script,
-  then run the post-deploy checks and open the PR.
-- **Phase 1 not started.** Wait for the owner's go-ahead.
+## 2026-10-09: Project memory for the unattended run
+- **Current phase:** setup (`phase/docs-memory`), before Phase 0.
+- **Done:**
+  - Created the `dev` integration branch from `main` + the earlier docs commit (`6f0bacd`) and pushed
+    it to origin.
+  - Rewrote `CLAUDE.md` for the unattended workflow (D-019).
+  - `PLAN.md` now lists phases 0, 1A, 1B, 3, 2, 4, 5, 6, 7, 8.
+  - Added D-014 to D-020 (no pay calculation, integer cents, customer-data handling, email-only
+    reminders, PIN + signed-token auth, workflow, new-deployment rollout).
+  - Added `MORNING_CHECKLIST.md`.
+  - Removed real employee names from `QA.md`.
+- **Next step:** Phase 0 on `phase/0-minute-hours`: commit the minute-based hours code that is
+  uncommitted in the working tree (from session 1), add Vitest and the required tests, remove real
+  names from `INITIAL_EMPLOYEES`, restore `appsScriptTemplate.ts` as a generated re-export.
+- **Known problems:**
+  - `CLAUDE.md` already refers to `npm test`, `npm run build:gas` and `npm run mock`; they arrive in
+    Phase 0 and 1A.
+  - The live app still has the rounding bug until the owner merges.
 
-## Session 2 (2026-10-09): Project memory
-- Created `CLAUDE.md` and `docs/` (PROJECT, PLAN, DECISIONS, PROGRESS, QA) from the current code.
-- Committed the docs on their own on `chore/project-docs`. No code changes.
+## 2026-10-09: Session 2, project memory (interactive)
+- Created `CLAUDE.md` and `docs/` on `chore/project-docs` (`6f0bacd`), docs only.
 
-## Session 1 (2026-10-09): Phase 0, minute-based hours
-- **Problem:** monthly and 15-day totals were slightly off, which costs real money.
-- **Root cause:** each shift was rounded to 0.1 h before being added up (D-001).
-- **Changes:** see PLAN Phase 0 and DECISIONS D-001 to D-012. Other fixes found during the audit:
-  - silent failed saves
-  - invented default times
-  - stale-cache overwrites
-  - preselected employee name
-  - roster save that never reached the sheet (and left "Copy of Template" tabs)
-  - free-text name in edits
-  - month browsing creating tabs
-  - row-by-column-A parsing
-- **Verified locally:** lint, build, hours checks, mock-sheet backend checks, browser demo mode
-  (`QA.md` → Phase 0 evidence).
-- **Live system contact:** one read-only `GET getTimesheet&monthYear=10-2026` to confirm the sheet layout.
-  October was empty. With the old backend, this call creates the current month's tab if it's missing,
-  which the app also does on every launch.
-- Left uncommitted. The owner hasn't redeployed the Apps Script yet.
+## 2026-10-09: Session 1, Phase 0 implementation (interactive)
+- **Root cause:** each shift was rounded to 0.1 h before being added up (D-001). 15 × 6h 20m showed
+  94.5 h instead of 95 h.
+- Implemented minute-based hours, pay-period summary and the Phase 0 backend fixes (D-001 to D-012).
+  Verified locally only; left uncommitted.
+- **Live system contact:** one read-only `getTimesheet` for `10-2026` to confirm the sheet layout.
