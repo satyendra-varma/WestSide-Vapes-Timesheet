@@ -84,8 +84,16 @@ showed only h:mm.
 - [x] Tests: `src/utils/csv.test.ts` (12)
 
 ## Phase 4: Data completeness (`phase/4-data-completeness`)
-- [ ] Edit shift (server-validated); delete manager-only; every change audited (who, when, old → new)
-- [ ] Roster persisted to the Sheet, manager-only edits, all devices read the same roster
+Audit (2026-10-09): edit (own/any) and manager-only delete were already server-validated and audited
+(1A), and roster edits were already persisted to the sheet and manager-only (1A). Gaps: a forced edit
+or delete could overwrite a change made elsewhere; cached data only refreshed on reload.
+- [x] Edit shift (server-validated; staff own, manager any); delete manager-only; every change audited
+      with who, when, old → new (tests in `completeness.test.ts`)
+- [x] Edits/deletes conditional on the slot the user saw (`expectedPrevious` / `expected` → conflict)
+      (D-038)
+- [x] Roster persisted to the Sheet, manager-only edits, all devices read the same roster; stale data
+      re-fetched on focus
+- [x] Tests: 10 new (143 total)
 
 ## Phase 5: Reliability + polish (`phase/5-reliability-polish`)
 - [ ] Offline queue for shift logs only: queued/failed states, retry, no silent loss; warn + clear on

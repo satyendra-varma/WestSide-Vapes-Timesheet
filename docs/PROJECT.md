@@ -149,8 +149,8 @@ Error codes: `unauthorized` (bad, expired or revoked token: the app shows re-log
 | `login` | anyone | `name`, `pin` | `{token, expiresAt, user:{name, role}}` |
 | `getEmployees` | staff: active names; manager: all + `hasPin`, `lockedUntil` | – | `[{name, role, active, …}]` |
 | `getTimesheet` | any | `monthYear` `MM-YYYY` | `{monthYear, records:[{date, shift, name, inTime, outTime}]}` (`[]` if no tab; never creates one) |
-| `saveShift` | staff: own name only; manager: anyone | `date` `YYYY-MM-DD`, `shift`, `name`, `inTime`, `outTime`, `forceOverwrite?` | `{previousData}` or `conflict` |
-| `deleteShift` | manager | `date`, `shift` | `{previousData}` |
+| `saveShift` | staff: own name only; manager: anyone | `date` `YYYY-MM-DD`, `shift`, `name`, `inTime`, `outTime`, `forceOverwrite?`, `expectedPrevious?` `{name,inTime,outTime}` | `{previousData}` or `conflict` |
+| `deleteShift` | manager | `date`, `shift`, `expected?` `{name,inTime,outTime}` | `{previousData}` or `conflict` |
 | `getTimetable` | any | – | `[{dayName, morning, evening}]` × 7 |
 | `updateTimetable` | manager | `timetable:[{dayName, morning, evening}]` | updated timetable |
 | `setPin` | manager | `name`, `pin` | `{name}`. Resets lockout and ends that person's sessions. |
@@ -162,6 +162,12 @@ Error codes: `unauthorized` (bad, expired or revoked token: the app shows re-log
   times `HH:mm` and not equal; `name` an existing, active employee.
 - Occupied slot with different data and no `forceOverwrite:true` → `conflict`, nothing written.
 - Staff can only overwrite their own slot; replacing someone else's needs the manager.
+- Edits send `expectedPrevious` and deletes send `expected` (the slot as the user saw it). If the sheet
+  has changed since (another device), the answer is `conflict` and nothing is written, even with
+  `forceOverwrite`.
+
+**Freshness:** the app's in-memory cache re-fetches any data older than 60 s when the app comes back
+into view (focus / visibilitychange), so devices converge on what the sheet says.
 
 **Auth** (D-018):
 - PIN hash = HMAC-SHA256(PIN_PEPPER, salt + ":" + pin).

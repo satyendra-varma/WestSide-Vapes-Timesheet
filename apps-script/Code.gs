@@ -553,13 +553,25 @@ function actionGetTimesheet(req) {
   return { monthYear: monthYear, records: records };
 }
 
+/**
+ * Optimistic concurrency for edits and deletes: the client sends the slot as it saw it. If the sheet
+ * has changed since then (another device), the server answers "conflict" instead of overwriting.
+ */
+function slotMatches(slot, expected) {
+  if (!expected || typeof expected !== 'object') return true;
+  return normalizeName(slot.name) === normalizeName(expected.name) &&
+    String(slot.inTime) === String(expected.inTime || '') &&
+    String(slot.outTime) === String(expected.outTime || '');
+}
+
 function describeSlot(slot) {
   return slot.name ? slot.name + ' ' + (slot.inTime || '--:--') + '-' + (slot.outTime || '--:--') : 'empty';
 }
 
 /**
- * req: { date: "YYYY-MM-DD", shift, name, inTime, outTime, forceOverwrite }
+ * req: { date: "YYYY-MM-DD", shift, name, inTime, outTime, forceOverwrite, expectedPrevious? }
  * Staff can only log their own shifts and can't replace someone else's. Managers can do both.
+ * expectedPrevious (sent by edits) must still match the sheet, otherwise the answer is a conflict.
  */
 function actionSaveShift(req, session) {
   var date = parseDateStr(req.date);
@@ -583,6 +595,9 @@ function actionSaveShift(req, session) {
   var occupied = !!(previous.name || previous.inTime || previous.outTime);
   var unchanged = normalizeName(previous.name) === employee.key && previous.inTime === inTime && previous.outTime === outTime;
 
+  if (!unchanged && req.expectedPrevious && !slotMatches(previous, req.expectedPrevious)) {
+    return { conflict: true, previousData: previous };
+  }
   if (occupied && !unchanged) {
     if (req.forceOverwrite !== true) {
       return { conflict: true, previousData: previous };
@@ -605,7 +620,7 @@ function actionSaveShift(req, session) {
   return { previousData: previous };
 }
 
-/** req: { date, shift }. Manager only (enforced by the router). */
+/** req: { date, shift, expected? }. Manager only (enforced by the router). */
 function actionDeleteShift(req, session) {
   var date = parseDateStr(req.date);
   if (!date) throw fail('invalid', 'Invalid date.', { field: 'date' });
@@ -614,6 +629,7 @@ function actionDeleteShift(req, session) {
   if (!sheet) throw fail('not_found', 'No shifts are logged for that month.');
   var previous = readSlot(sheet, date.day, req.shift);
   if (!previous.name && !previous.inTime && !previous.outTime) throw fail('not_found', 'That shift is already empty.');
+  if (req.expected && !slotMatches(previous, req.expected)) return { conflict: true, previousData: previous };
   sheet.getRange(MONTH_LAYOUT.FIRST_DAY_ROW + date.day - 1, cols.name, 1, 3).setValues([['', '', '']]);
   audit(session.name, 'shift.delete', req.date + ' ' + req.shift, 'was: ' + describeSlot(previous));
   return { previousData: previous };
