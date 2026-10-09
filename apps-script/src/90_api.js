@@ -28,7 +28,9 @@ var ACTIONS = {
   getCashToday: { auth: true, handler: actionGetCashToday },
   saveCashCount: { auth: true, write: true, handler: actionSaveCashCount },
   getCashHistory: { auth: true, manager: true, handler: actionGetCashHistory },
-  setCashSettings: { auth: true, write: true, manager: true, handler: actionSetCashSettings }
+  setCashSettings: { auth: true, write: true, manager: true, handler: actionSetCashSettings },
+  getReminderSettings: { auth: true, manager: true, handler: actionGetReminderSettings },
+  setReminderSettings: { auth: true, write: true, manager: true, handler: actionSetReminderSettings }
 };
 
 function jsonOutput(body) {

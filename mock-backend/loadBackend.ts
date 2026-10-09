@@ -28,6 +28,8 @@ export interface Backend {
   get(): ApiResponse;
   /** Calls a top-level backend function (e.g. the one-time setup functions). */
   run<T = unknown>(fn: string, ...args: unknown[]): T;
+  /** Reads a top-level backend `var` (e.g. a config constant). */
+  global<T = unknown>(name: string): T;
 }
 
 interface TextOutput { getContent(): string }
@@ -50,5 +52,6 @@ export function createBackend(options: { timeZone?: string; nowMs?: number; live
     postRaw: (raw) => parse(call('doPost', { postData: { contents: raw } })),
     get: () => parse(call('doGet', { parameter: {} })),
     run: <T,>(fn: string, ...args: unknown[]) => call(fn, ...args) as T,
+    global: <T,>(name: string) => JSON.parse(JSON.stringify((context as Record<string, unknown>)[name])) as T,
   };
 }

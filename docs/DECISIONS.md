@@ -461,3 +461,21 @@ Session-expiry timers pass their own token the same way.
   the float later doesn't rewrite past differences.
 - No sales, pay or reconciliation logic (D-014).
 
+## D-044: Reminder emails
+*2026-10-09 · Accepted · Phase 8*
+
+- **When:** an hourly trigger checks yesterday's and today's roster. The rostered employee gets one
+  email when the shift's end time (`16:00` / `23:00`, the app defaults, drift-tested) plus the grace
+  period has passed and **nobody** has logged that slot. If someone else covered it, there's no email.
+- **No duplicates:** the `Reminders` tab records every email sent and is the de-duplication key
+  (`date|shift|name`).
+- **Skipped:** inactive employees and anyone without a valid address in the additive `Employees` Email
+  column.
+- **Off by default:** the manager enables it and sets the grace period (15–720 min, default 60) in
+  Settings. The panel shows whether the trigger is installed and who has no email.
+- **Times:** compared as local `yyyy-MM-dd HH:mm` strings in the sheet's time zone, with pure calendar
+  arithmetic for "end + grace", so there are no daylight-saving or time-zone offsets to get wrong.
+- Stops if MailApp's daily quota is exhausted, and audits each run that sent mail (count only).
+- **Email body:** only the employee's own name, the shift and the date. No other people's data. No SMS
+  and no paid services (D-017).
+

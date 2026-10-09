@@ -3,6 +3,23 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 8 complete: all phases done
+- **Current phase:** none. Phases 0, 1A, 1B, 3, 2, 4, 5, 6, 7 and 8 are merged into `dev` and pushed.
+  `main` untouched.
+- **Done (8):**
+  - `sendShiftReminders` (hourly) with the `Reminders` log; Email column via `migrateSheets`;
+  - manager reminder settings UI;
+  - `installTriggers` now installs purge + reminders;
+  - D-044; 244 tests; browser-verified settings.
+- **Next step (owner):** follow `docs/MORNING_CHECKLIST.md` from step 1: backup, staging test,
+  deploy, merge.
+- **Known problems / limits:**
+  - Sheet formulas (J–Q) are verified only as strings, not evaluated (no Sheets engine in tests);
+    check them on staging.
+  - Real Apps Script behaviour (MailApp, triggers, Utilities) is exercised only through fakes; the
+    staging run in MORNING_CHECKLIST step 4 is the first real execution.
+  - Known auth limits in D-018 (6-digit PIN relies on lockout; Sheet/script editors bypass auth).
+
 ## 2026-10-09: Phase 7 complete (end-of-day cash count)
 - **Current phase:** 7 → merged into `dev`; next is Phase 8 (email reminders).
 - **Done:**
