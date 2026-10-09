@@ -92,6 +92,24 @@ export interface CustomerRequest {
   createdBy: string;
 }
 
+export interface CashCount {
+  date: string;
+  countedBy: string;
+  updatedAt: string;
+  /** Pieces per denomination, keyed by value in cents ("10000" … "5"). */
+  counts: Record<string, number>;
+  totalCents: number;
+  floatCents: number;
+  differenceCents: number;
+}
+
+export interface CashDay {
+  date: string;
+  /** Current target float (integer cents). */
+  floatCents: number;
+  count: CashCount | null;
+}
+
 export interface RosterDay {
   dayName: string;
   morning: string;

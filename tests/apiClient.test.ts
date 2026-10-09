@@ -111,6 +111,8 @@ describe('end to end against the real backend code', () => {
     setUnauthorizedListener(listener);
     await expect(createBackendApi('forged.token').getEmployees()).rejects.toMatchObject({ code: 'unauthorized' });
     expect(listener).toHaveBeenCalledTimes(1);
+    // The refused token is passed along so the auth layer can ignore late replies for an old session.
+    expect(listener).toHaveBeenCalledWith('forged.token');
   });
 
   it('surfaces conflicts with the existing slot', async () => {

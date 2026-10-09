@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BackendApi, createBackendApi, login as loginRequest } from '../api/backend';
 import { setUnauthorizedListener } from '../api/client';
 import { SessionUser } from '../api/types';
@@ -24,17 +24,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [expiredUser, setExpiredUser] = useState<SessionUser | null>(null);
 
-  const expire = useCallback(() => {
-    // Keep the screen (and any unsaved form) but drop the token and every cached record.
-    setSession((current) => {
-      if (current) setExpiredUser(current.user);
-      return null;
-    });
+  const sessionRef = useRef<Session | null>(session);
+  sessionRef.current = session;
+
+  // Keep the screen (and any unsaved form) but drop the token and every cached record. Only acts
+  // when the refused token is still the current one: a late reply to a request made with an older
+  // token must not end a newer session.
+  const expire = useCallback((refusedToken: string | undefined) => {
+    const current = sessionRef.current;
+    if (!current || refusedToken === undefined || current.token !== refusedToken) return;
+    sessionRef.current = null;
+    setExpiredUser(current.user);
+    setSession(null);
     clearSession();
     clearCache();
   }, []);
 
   const logout = useCallback(() => {
+    sessionRef.current = null;
     setSession(null);
     setExpiredUser(null);
     clearSession();
@@ -46,18 +53,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // The main screen is keyed by user name (App.tsx), so a different person never inherits the
     // previous user's unsaved forms; the same person picks up where they were.
     saveSession(next);
+    sessionRef.current = next;
     setSession(next);
     setExpiredUser(null);
   }, []);
 
   useEffect(() => {
-    setUnauthorizedListener(expire);
+    setUnauthorizedListener((token) => expire(token));
     return () => setUnauthorizedListener(null);
   }, [expire]);
 
   useEffect(() => {
     if (!session) return;
-    const timer = window.setTimeout(expire, Math.max(0, session.expiresAt - Date.now()));
+    const timer = window.setTimeout(() => expire(session.token), Math.max(0, session.expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [session, expire]);
 

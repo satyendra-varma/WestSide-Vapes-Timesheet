@@ -125,8 +125,12 @@ Audit (2026-10-09): new feature, nothing existed. Requires 1A (done).
 - [ ] **(owner)** Run `installTriggers` once (MORNING_CHECKLIST step 5b)
 
 ## Phase 7: End-of-day cash count (`phase/7-cash-count`)
-- [ ] Canadian denominations, live total in integer cents, configurable target float, difference
-- [ ] One count per day; edits audited; manager sees history, staff adds today's
+Audit (2026-10-09): new feature, nothing existed.
+- [x] Canadian denominations, live total in integer cents, configurable target float, difference
+- [x] One count per day; edits audited (old → new); manager sees history and edits past days, staff adds
+      or updates today's (D-042)
+- [x] Tests: 19 backend + 7 money/parity (232 total)
+- [x] Found and fixed a session race while testing (D-043)
 
 ## Phase 8: Reminders, email only (`phase/8-reminders`)
 - [ ] Time-driven trigger: roster vs logged shifts; email after grace period; reminder log prevents

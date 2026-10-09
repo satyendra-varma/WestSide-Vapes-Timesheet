@@ -433,3 +433,31 @@ by `scripts/make-icons.ts` (no image library), and a test checks the committed P
   once. A request is deleted when it's fulfilled and its status changed more than N days ago (by date in
   the sheet's time zone).
 
+## D-043: An "unauthorized" reply only ends the session whose token was refused
+*2026-10-09 · Accepted · Fix found in Phase 7 testing*
+
+Browser testing found a race. A tab still held a stale session from a previous backend run; its
+in-flight requests were refused after a different user had logged in, and the late "unauthorized"
+reply expired the brand-new session. The client now passes the refused token to the auth layer, which
+expires only if that token is still the current one (tracked in a ref, not inside a state updater).
+Session-expiry timers pass their own token the same way.
+
+## D-042: Cash count rules
+*2026-10-09 · Accepted · Phase 7*
+
+- **Denominations:** Canadian $100, $50, $20, $10, $5 bills and $2, $1, 25¢, 10¢, 5¢ coins. No
+  pennies (withdrawn in 2013); no rolls (not requested).
+- **Integer cents everywhere:**
+  - The server computes the total from piece counts.
+  - The client preview uses the same integer logic (parity-tested).
+  - Dollar input for the float is parsed from text digit by digit; no float maths.
+  - `setCashSettings` refuses strings, so dollars can't be mistaken for cents.
+- **One count per day, keyed by the sheet's "today":**
+  - Staff can create *and* update today's count (fixing a miscount on the spot) but can't touch past
+    days or see history.
+  - The manager can edit any past day and see history by month.
+  - Every create/update is audited with old → new totals.
+- **Float snapshot:** each day stores the target float in effect when it was first counted, so changing
+  the float later doesn't rewrite past differences.
+- No sales, pay or reconciliation logic (D-014).
+

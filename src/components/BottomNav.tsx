@@ -1,7 +1,7 @@
 import React from 'react';
-import { Clock, Calendar, Users, Package } from 'lucide-react';
+import { Clock, Calendar, Users, Package, Banknote } from 'lucide-react';
 
-export type TabType = 'logging' | 'monthly' | 'timetable' | 'stock';
+export type TabType = 'logging' | 'monthly' | 'timetable' | 'stock' | 'cash';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -14,6 +14,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
     { id: 'monthly', label: 'Timesheet', icon: Calendar },
     { id: 'timetable', label: 'Roster', icon: Users },
     { id: 'stock', label: 'Stock', icon: Package },
+    { id: 'cash', label: 'Cash', icon: Banknote },
   ];
 
   return (

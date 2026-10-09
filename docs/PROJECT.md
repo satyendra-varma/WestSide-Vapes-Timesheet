@@ -13,6 +13,8 @@ A mobile-first web app for WestSide Vapes (Kerrisdale) staff:
   backend code.
 - **Stock:** low/out-of-stock list, and customer requests (name, phone, product, status), grouped by
   product.
+- **Cash:** end-of-day cash count by denomination; total, target float and difference in integer
+  cents.
 - Installable PWA. Shift logs made offline are queued on the device and sent automatically.
 
 There's no server or database of our own. The Google Sheet is the system of record, behind an Apps
@@ -35,7 +37,7 @@ Script web app. The app holds data in memory only, for the length of a session.
    │  every other action -> verify token + employee active + token version + role
    │  writes under the script lock; every change appended to the Audit tab
    ▼
- Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable · Audit · Stock · Requests
+ Google Sheet: Template · MM-YYYY month tabs · Employees · Timetable · Audit · Stock · Requests · CashCounts
  Script Properties: TOKEN_SECRET · PIN_PEPPER · auth.user.<name> (salt, hash, failures, lock, token version)
 ```
 
@@ -74,6 +76,8 @@ Script web app. The app holds data in memory only, for the length of a session.
 | `src/components/PendingShifts.tsx`, `src/offline/*` | Offline queue for new shift logs: storage + processing (`shiftQueue.ts`), runner, safe logout (`useShiftQueue.ts`), UI. |
 | `src/components/AuditLog.tsx` | Manager audit viewer (newest first, paging, filter). |
 | `src/components/{StockTab,StockList,CustomerRequests}.tsx` | Stock tab: low/out list (session cache) and customer requests (component state only). |
+| `src/components/CashCountTab.tsx`, `src/utils/money.ts` | Cash count UI; integer-cent money helpers (mirror backend `cashTotalCents` / `centsText`). |
+| `apps-script/src/13_cash.js` | Cash counts, float setting, history. |
 | `src/utils/phone.ts` | NANP phone normalisation + `tel:` links (mirrors backend `normalizePhone`). |
 | `apps-script/src/10_records.js`, `11_stock.js`, `12_requests.js`, `96_triggers.js` | Simple-table helpers, stock, customer requests + purge, `installTriggers`. |
 | `src/hooks/useOnline.ts` | Online/offline state for the header pill. |
@@ -153,11 +157,19 @@ Status Changed At | Status Changed By | Created By.
 - Fulfilled rows are deleted by `purgeFulfilledRequests()` once their status changed more than
   `REQUESTS_PURGE_DAYS` days ago (default 30, manager-settable 1–365, Script Property).
 
+### `CashCounts` (created on first save): money in integer cents, D-015 and D-042
+Date | Counted By | Updated At | $100 | $50 | $20 | $10 | $5 | $2 | $1 | 25¢ | 10¢ | 5¢ | Total (cents) |
+Float (cents) | Difference (cents).
+- One row per day.
+- Denomination columns hold piece counts (whole numbers).
+- Float is the target float in effect when that day was first counted.
+
 ### Script Properties (Project Settings → Script properties)
 - `TOKEN_SECRET` and `PIN_PEPPER`: random, created on first use.
 - `auth.user.<lower-case name>`: `{salt, hash, failed, lockedUntil, tv}`.
 - `SETUP_MANAGER_NAME` / `SETUP_MANAGER_PIN`: temporary, deleted by `setManagerPin`.
 - `REQUESTS_PURGE_DAYS`: purge period for fulfilled customer requests.
+- `CASH_FLOAT_CENTS`: target float (integer cents).
 
 Anyone with edit access to the Sheet or script can bypass auth (D-018).
 
@@ -192,6 +204,11 @@ Error codes: `unauthorized` (bad, expired or revoked token: the app shows re-log
 | `updateRequestStatus` | any | `id`, `status` | requests |
 | `deleteRequest` | manager | `id` | requests |
 | `getRequestSettings` / `setRequestSettings` | manager | `purgeDays` 1–365 | `{purgeDays}` |
+
+| `getCashToday` | any | – | `{date, floatCents, count|null}` (today in the sheet's zone) |
+| `saveCashCount` | staff: today; manager: any date ≤ today | `counts {"10000": n, … "5": n}` (whole numbers 0–10000), `date?` | `{date, floatCents, count}` |
+| `getCashHistory` | manager | `month` `YYYY-MM` | `[count…]` newest first |
+| `setCashSettings` | manager | `floatCents` (JSON integer, 0–10,000,000) | `{floatCents}` |
 
 Customer-request errors never contain the name or phone. Audit rows for requests carry only the ID and
 the status change (`request.create`, `request.status`, `request.delete`, `request.purge` with a count).
