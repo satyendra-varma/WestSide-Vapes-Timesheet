@@ -479,3 +479,16 @@ Session-expiry timers pass their own token the same way.
 - **Email body:** only the employee's own name, the shift and the date. No other people's data. No SMS
   and no paid services (D-017).
 
+## D-045: Final polish and accepted limits
+*2026-10-09 · Accepted · Final pass*
+
+- The Settings "Copy backend script" loads `Code.gs` on demand (separate ~21 KB-gzipped chunk) instead
+  of shipping it in every page load. The service worker caches it like any other static asset; it
+  contains no secrets.
+- Cash-count lookups tolerate a date cell that was hand-edited into a real date (no duplicate day rows).
+- **Accepted limits** (documented, not fixed):
+  - The login endpoint is public by necessity. Repeated failed logins each add an Audit row, so
+    someone could bloat the Audit tab; Apps Script quotas cap the rate.
+  - Emergency revocation is "delete `TOKEN_SECRET`" (MORNING_CHECKLIST).
+  - Sheet formulas (J–Q) and real Google services are verified on the staging copy, not in CI.
+

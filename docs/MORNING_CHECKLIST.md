@@ -119,3 +119,18 @@ the float that applied when it was first counted.
   `npm run build` but no tests.
 - If you want, add `npm ci` and `npm test` before its build step, or, in repo **Settings → Branches**,
   protect `main` and require the **CI / check** status to pass before merging.
+
+## If something goes wrong (keep for later)
+- **Log everyone out immediately** (lost phone, leaked PIN): Apps Script → **Project Settings → Script
+  properties** → delete `TOKEN_SECRET`. Every session ends at once; a new secret is created on the next
+  login. Then reset the affected PIN in the app.
+- **Manager forgot their PIN:** add `SETUP_MANAGER_NAME` / `SETUP_MANAGER_PIN` again and run
+  `setManagerPin` (step 4.3). It replaces the PIN and ends that manager's sessions.
+- **A staff member is locked out** (5 wrong PINs): Settings → Staff & PINs → Unlock (or wait 15
+  minutes).
+- **Someone leaves:** Settings → Staff & PINs → Deactivate. Their sessions end immediately; their past
+  shifts stay.
+- **Stop reminder emails:** Settings → Shift reminders → untick → Save.
+- **Roll back the app:** revert the merge on `main`. The old Apps Script deployment works only if you
+  haven't archived it, so archive it only after the new site has run well for a few days.
+

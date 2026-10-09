@@ -56,7 +56,7 @@ function cashRowToCount(cells) {
   CASH_DENOMINATIONS.forEach(function (d, i) { counts[String(d)] = Number(cells[3 + i]) || 0; });
   var base = 3 + CASH_DENOMINATIONS.length;
   return {
-    date: String(cells[0]),
+    date: String(cells[0]).slice(0, 10), // tolerate a hand-edited date cell ("2026-10-09 00:00")
     countedBy: String(cells[1]),
     updatedAt: String(cells[2]),
     counts: counts,
@@ -70,7 +70,7 @@ function findCashRow(date) {
   var sheet = spreadsheet().getSheetByName('CashCounts');
   if (!sheet) return null;
   var rows = tableRows(sheet, CASH_HEADER.length);
-  for (var i = 0; i < rows.length; i++) if (rows[i].cells[0] === date) return rows[i];
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].cells[0]).slice(0, 10) === date) return rows[i];
   return null;
 }
 
