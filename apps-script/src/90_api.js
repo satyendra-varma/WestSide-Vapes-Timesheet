@@ -24,7 +24,11 @@ var ACTIONS = {
   updateRequestStatus: { auth: true, write: true, handler: actionUpdateRequestStatus },
   deleteRequest: { auth: true, write: true, manager: true, handler: actionDeleteRequest },
   getRequestSettings: { auth: true, manager: true, handler: actionGetRequestSettings },
-  setRequestSettings: { auth: true, write: true, manager: true, handler: actionSetRequestSettings }
+  setRequestSettings: { auth: true, write: true, manager: true, handler: actionSetRequestSettings },
+  getCashToday: { auth: true, handler: actionGetCashToday },
+  saveCashCount: { auth: true, write: true, handler: actionSaveCashCount },
+  getCashHistory: { auth: true, manager: true, handler: actionGetCashHistory },
+  setCashSettings: { auth: true, write: true, manager: true, handler: actionSetCashSettings }
 };
 
 function jsonOutput(body) {

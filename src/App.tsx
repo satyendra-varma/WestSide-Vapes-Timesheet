@@ -5,6 +5,7 @@ import { ShiftLoggingTab } from './components/ShiftLoggingTab';
 import { MonthlyTimesheetTab } from './components/MonthlyTimesheetTab';
 import { TimetableTab } from './components/TimetableTab';
 import { StockTab } from './components/StockTab';
+import { CashCountTab } from './components/CashCountTab';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, useAuth } from './auth/AuthContext';
@@ -57,6 +58,7 @@ const MainApp: React.FC = () => {
         {activeTab === 'monthly' && <MonthlyTimesheetTab />}
         {activeTab === 'timetable' && <TimetableTab />}
         {activeTab === 'stock' && <StockTab />}
+        {activeTab === 'cash' && <CashCountTab />}
       </main>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

@@ -3,13 +3,20 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
-## 2026-10-09: Fix: late "unauthorized" replies (during Phase 7)
-- **Current phase:** 7 in progress on `phase/7-cash-count`.
-- **Done:** fixed a session race (D-043): a refused *old* token no longer logs out the *current*
-  session. Browser-verified: stale session, overlay, log out, log in as someone else; the new session
-  stays.
-- **Next step:** commit the Phase 7 cash count (backend + UI + tests are written and green), then
-  merge.
+## 2026-10-09: Phase 7 complete (end-of-day cash count)
+- **Current phase:** 7 → merged into `dev`; next is Phase 8 (email reminders).
+- **Done:**
+  - `CashCounts` tab; cash count UI (Cash tab) with live integer-cent total, float, difference.
+  - Staff count today; the manager sets the float, sees history and edits past days; all audited.
+  - Session race fix (D-043, separate commit).
+  - Browser-verified ($242.60 example, float $200, +$42.60, history, stale-session scenario).
+  - 232 tests.
+- **Next step:** Phase 8 on `phase/8-reminders`:
+  - hourly trigger compares roster vs logged shifts and emails the employee after a grace period;
+  - Email column in Employees (additive);
+  - Reminders log tab prevents duplicates; honour the active flag;
+  - manager settings (enabled, grace minutes);
+  - add to `installTriggers`.
 - **Known problems:** none.
 
 ## 2026-10-09: Phase 6 complete (stock list + customer requests)

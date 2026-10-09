@@ -34,6 +34,8 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/backend/audit.test.ts` | `getAudit` manager-only, newest first, paging, timestamp format, limit clamping, no PINs |
 | `tests/backend/stockRequests.test.ts` | stock add/update/resolve/validation; requests minimal fields, phone formats, no name/phone in errors, logs or audit, roles, formula-looking names, purge by age and setting, `installTriggers` idempotent |
 | `tests/stockRequestsClient.test.ts` | phone normalisation, `tel:` links, frontend/backend parity, requests CSV guard |
+| `tests/backend/cash.test.ts` | denomination totals in cents, no float drift, validation, one count per day, float snapshot, staff/manager/date rules, history, float setting, `centsText` |
+| `tests/money.test.ts` | cents formatting, dollar parsing from text, count parsing, denominations, frontend/backend parity |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -117,6 +119,16 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
       the screen as soon as the re-login prompt shows.
 - [ ] Devtools → Application: no customer data in Local/Session Storage or Cache Storage.
 - [ ] Audit tab: request rows show only the ID and the status, never a name, phone or product.
+
+**Cash count**
+- [ ] Enter 12 × $20, 9 × 25¢, 3 × 10¢, 1 × 5¢: Total $242.60. With a $200.00 float, Difference
+      shows +$42.60 in amber. With Total = float it's green.
+- [ ] A count of `1.5` or `-1` is refused (red field, Save disabled).
+- [ ] Saving again today updates the same day ("Update today's count"); the Audit tab shows
+      `cash.update` with old → new totals.
+- [ ] Staff: no float setting, no history, can only count today.
+- [ ] Manager: set float (dollars, e.g. `200.50`); History → month → Edit a past day → save.
+- [ ] `CashCounts` tab: one row per day, whole-number counts, totals in cents.
 
 **Manager Settings → Audit log**
 - [ ] "Show latest" lists entries newest first; the filter narrows them; "Load older" pages when there

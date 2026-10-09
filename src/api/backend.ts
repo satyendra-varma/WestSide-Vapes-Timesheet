@@ -2,6 +2,8 @@
 import { apiCall } from './client';
 import {
   AuditPage,
+  CashCount,
+  CashDay,
   CustomerRequest,
   RequestStatus,
   StockItem,
@@ -39,6 +41,10 @@ export interface BackendApi {
   deleteRequest(id: string): Promise<CustomerRequest[]>;
   getRequestSettings(): Promise<{ purgeDays: number }>;
   setRequestSettings(purgeDays: number): Promise<{ purgeDays: number }>;
+  getCashToday(): Promise<CashDay>;
+  saveCashCount(counts: Record<string, number>, date?: string): Promise<CashDay>;
+  getCashHistory(month: string): Promise<CashCount[]>;
+  setCashSettings(floatCents: number): Promise<{ floatCents: number }>;
 }
 
 /** All authenticated actions, bound to one session token. */
@@ -64,5 +70,9 @@ export function createBackendApi(token: string): BackendApi {
     deleteRequest: (id) => call('deleteRequest', { id }),
     getRequestSettings: () => call('getRequestSettings'),
     setRequestSettings: (purgeDays) => call('setRequestSettings', { purgeDays }),
+    getCashToday: () => call('getCashToday'),
+    saveCashCount: (counts, date) => call('saveCashCount', { counts, date }),
+    getCashHistory: (month) => call('getCashHistory', { month }),
+    setCashSettings: (floatCents) => call('setCashSettings', { floatCents }),
   };
 }
