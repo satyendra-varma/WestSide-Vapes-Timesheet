@@ -47,6 +47,15 @@ real data without touching the live sheet:
    - The execution log should say "Manager PIN set for …". Both SETUP properties are deleted
      automatically, even if it fails (then add them again and fix what the log says).
    - Your Employees tab now has `Role` and `Active` columns. Nothing existing was moved.
+   - Then choose `migrateSheets` → **Run**. The log lists each month tab: `added`, `present`, or
+     `skipped: <cell> already holds something else`. Skipped tabs were left completely untouched.
+     Tell Claude about any skipped tab rather than moving your data.
+   - Open a finished month tab and check:
+     - J/K show whole minutes (e.g. 380 for 09:00–15:20);
+     - M–Q list each person with minutes for 1–15, 16–end, month, and h:mm;
+     - the numbers match step 3 and the new app's **Hours by Employee**.
+   - If your own Hours columns (E/I) show `#VALUE!` on rows the new app writes, that's because In/Out
+     are now plain text. Use the new J/K/M–Q totals, or change E/I to wrap times in `TIMEVALUE()`.
 4. **Deploy → New deployment** → type **Web app** → Execute as **Me** → Who has access **Anyone** →
    **Deploy**. Copy the URL ending in `/exec`. This is the *staging* URL.
 5. Run the app on your computer against it. In PowerShell:
@@ -59,7 +68,8 @@ real data without touching the live sheet:
 ## 5. Deploy v2 for real (when step 4 looks right)
 1. In the **real** Sheet: **Extensions → Apps Script** → paste the same `apps-script/Code.gs` → **Save**.
    - Saving does **not** change the existing deployment: it keeps serving the old code to the live app.
-2. Set your manager PIN in the real project, exactly as in step 4.3.
+2. Set your manager PIN in the real project, exactly as in step 4.3, then run `migrateSheets` there
+   too and read its log.
 3. **Deploy → New deployment** (not "Manage deployments") → Web app, Me, Anyone → copy the **new**
    `/exec` URL. Keep the old deployment for now.
 4. Set every staff member's PIN from the app (run it locally as in step 4.5, but with the *new real*

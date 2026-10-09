@@ -306,3 +306,19 @@ not a secret) points `npm run dev:mock` at the local mock backend.
 Without React types, every component was effectively `any`, so the 1A rewrite wouldn't have been
 type-checked. Adding them early produced no errors. Strict mode itself stays in Phase 3.
 
+## D-035: The sheet sums integer minutes in new columns; In/Out stored as text
+*2026-10-09 · Accepted · Phase 1B*
+
+- In/Out are written as plain text `HH:mm` (format `@`), so Sheets can't reinterpret them by locale or
+  time zone.
+- The minute-total part of D-021 lands here: new columns J/K hold integer minutes per shift by formula
+  (`TIMEVALUE(TEXT(x,"HH:mm"))` reads both text and legacy time values; `MOD(…,1440)` handles midnight).
+- M–Q total those minutes per employee and per half-month and show h:mm.
+- Everything is additive: E/I (the owner's Hours formulas) and A–I positions are untouched.
+- The migration skips, without writing anything, any tab where a target cell is occupied.
+- **Why not rewrite E/I?** They're the owner's columns and may feed their payroll process; changing
+  their meaning (decimal → minutes or h:mm) could silently change pay. The owner can switch to J–Q at
+  their own pace.
+- **Known:** the formulas can't be evaluated in tests (no Sheets engine). Their exact strings are
+  tested, and the owner verifies them on the staging copy (MORNING_CHECKLIST step 4).
+

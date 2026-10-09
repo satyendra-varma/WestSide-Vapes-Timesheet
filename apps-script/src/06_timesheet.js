@@ -1,5 +1,7 @@
-// Month tabs "MM-YYYY", copied from "Template" on the first write of a month.
-// Row = day + 2. Morning: B name, C in, D out. Evening: F name, G in, H out.
+// Month tabs "MM-YYYY", copied from "Template" on the first write of a month (which also adds the
+// minute columns and totals, see 09_month_formulas.js).
+// Row = day + 2. Morning: B name, C in, D out. Evening: F name, G in, H out. In/Out are written as
+// plain text "HH:mm"; older rows may hold time values, which readTimeCell() also understands.
 
 function getMonthSheet(monthYear, createIfMissing) {
   if (!isValidMonthYear(monthYear)) throw fail('invalid', 'Invalid month.', { field: 'monthYear' });
@@ -11,6 +13,7 @@ function getMonthSheet(monthYear, createIfMissing) {
     sheet = template.copyTo(ss);
     sheet.setName(monthYear);
     sheet.protect().setDescription('Protected Monthly Sheet (' + monthYear + ')').setWarningOnly(true);
+    ensureMonthFormulas(sheet);
   }
   return sheet;
 }
@@ -107,7 +110,8 @@ function actionSaveShift(req, session) {
     var row = MONTH_LAYOUT.FIRST_DAY_ROW + date.day - 1;
     var cols = shiftColumns(req.shift);
     sheet.getRange(row, 1).setValue(pad2(date.month) + '/' + pad2(date.day) + '/' + date.year);
-    sheet.getRange(row, cols.name + 1, 1, 2).setNumberFormat('HH:mm');
+    // Plain text, so the sheet stores exactly "HH:mm" (no time-zone or locale conversion).
+    sheet.getRange(row, cols.name + 1, 1, 2).setNumberFormat('@');
     sheet.getRange(row, cols.name, 1, 3).setValues([[safeCellText(employee.name), inTime, outTime]]);
     audit(session.name, occupied ? 'shift.update' : 'shift.create', req.date + ' ' + req.shift,
       employee.name + ' ' + inTime + '-' + outTime + (occupied ? ' (was: ' + describeSlot(previous) + ')' : ''));
