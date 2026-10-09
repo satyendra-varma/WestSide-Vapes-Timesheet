@@ -14,7 +14,7 @@ export interface ShiftRecord {
   shift: ShiftType;
   inTime: string; // HH:mm
   outTime: string; // HH:mm
-  totalHours: number;
+  // No stored hours field: always derive minutes from inTime/outTime (see utils/hours.ts)
   submittedAt: string; // ISO string
   notes?: string;
 }

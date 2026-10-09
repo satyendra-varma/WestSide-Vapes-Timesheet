@@ -3,6 +3,30 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 0 complete (minute-based hours)
+- **Current phase:** 0 → merged into `dev`; next is 1A.
+- **Audit results:**
+  - `tsc --noEmit`: 0 errors. `npm run build`: OK.
+  - Hours math outside `hours.ts`: the 12-hour warning (`12 * 60` in ShiftLoggingTab) and
+    `fixHoursFormulas` (decimal sheet formulas). Both are fixed.
+  - `githubPagesExport.ts` has no hours math.
+  - The `calculateShiftHours` / `totalHours` breakage was already fixed in the session-1 working tree.
+- **Done:**
+  - Committed the session-1 minute-based code.
+  - Added `LONG_SHIFT_MINUTES` and `needsReview` to `hours.ts`, plus NaN guards.
+  - New `periods.ts` for pay periods.
+  - Vitest with 16 tests: formatting, 31 × 6h20m = 196h 20m, a regression test proving the old logic
+    lost 62 min, overnight, invalid times, per-employee totals, semi-monthly split, Settings export
+    drift.
+  - `INITIAL_EMPLOYEES` emptied (no real names).
+  - `appsScriptTemplate.ts` restored as a `?raw` re-export.
+  - `fixHoursFormulas` removed (D-021). `package-lock.json` committed.
+- **Next step:** Phase 1A on `phase/1a-auth`: split the backend into `apps-script/src/*.js` with a
+  generated `Code.gs`, build the Node fakes + mock server, add auth, then the frontend login gate.
+- **Known problems:**
+  - `@types/react` is missing, so components are effectively untyped (Phase 3 adds it and strict mode).
+  - The live app is unchanged until the owner merges.
+
 ## 2026-10-09: Project memory for the unattended run
 - **Current phase:** setup (`phase/docs-memory`), before Phase 0.
 - **Done:**

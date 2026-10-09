@@ -6,7 +6,7 @@
 ## Before every commit
 1. `npm run lint`: must exit 0.
 2. `npm run build`: must succeed.
-3. `npm test`, once it exists (Phase 3).
+3. `npm test`: must pass (Vitest; `src/**/*.test.ts`, `tests/**/*.test.ts`).
 4. The manual checks below that cover the change.
 
 Never commit on a failing check. Report it with the output.
@@ -83,8 +83,6 @@ Write checks (on **staging**, or on live only with the owner present and the ent
 - [ ] Log a different shift into the same slot → conflict modal; Overwrite → the sheet updates.
 - [ ] Delete from the Timesheet tab → cells cleared.
 - [ ] Roster save → `Timetable` tab updates and no "Copy of Template" tab appears.
-- [ ] If `fixHoursFormulas` was run: E3 is `=IF(OR(C3="",D3=""),"",ROUND(MOD(D3-C3,1)*1440)/60)`, and a
-      09:00–15:20 row shows `6.33`.
 
 ## Phase 0 evidence (2026-10-09, local)
 - `npm run lint` and `npm run build` passed.
@@ -101,7 +99,7 @@ Write checks (on **staging**, or on live only with the owner present and the ent
   - Day 31 in September, an unknown shift, and missing times are rejected.
   - Delete clears the slot.
   - The roster writes, updates and ignores non-days.
-  - `fixHoursFormulas` writes the expected formulas and skips non-month tabs.
+  - (`fixHoursFormulas` was tested then, but removed before any deploy; see D-021.)
 - **Browser, demo mode, 375 px:**
   - Totals matched hand calculation (e.g. one employee 1,945 min = 32h 25m; total 120h 30m).
   - Pay-period switch, flagged shift, edit flow (38h 20m → 46h), copy text, zero-length block, and the

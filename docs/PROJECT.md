@@ -44,7 +44,10 @@ localStorage cache.
 | `src/config.ts` | `DEFAULT_APPS_SCRIPT_URL` (live deployment, public), `SHOP_INFO` (name, default shift times 09:00–16:00 / 16:00–23:00), `INITIAL_EMPLOYEES` fallback list, `getTodayDateString`. |
 | `src/types.ts` | `ShiftRecord`, `DaySchedule` (+ unused `ConflictCheckPayload`, `AppsScriptResponse`). |
 | `src/services/api.ts` | Every backend call, response handling, sheet-row parsing, localStorage caches. |
-| `src/utils/hours.ts` | Duration math in integer minutes, display formatting, per-employee totals. |
+| `src/utils/hours.ts` | **Only** place hours are computed: integer minutes, formatting, per-employee totals, review flag. Tests: `hours.test.ts`. |
+| `src/utils/periods.ts` | Semi-monthly pay periods (1–15, 16–end). Tests: `periods.test.ts`. |
+| `src/utils/appsScriptTemplate.ts` | `?raw` re-export of `apps-script/Code.gs` for Settings → Copy; drift test in `appsScriptTemplate.test.ts`. |
+| `vitest.config.ts` | Test runner config (`npm test`). |
 | `src/utils/githubPagesExport.ts` | Legacy single-file HTML generator (Settings → Download). Out of date; see Known gaps. |
 | `src/vite-env.d.ts` | Vite client types (needed for the `?raw` import). |
 | `src/components/Header.tsx` | Brand, Live/Demo pill, settings button. |
@@ -90,8 +93,8 @@ Confirmed against the live `10-2026` tab on 2026-10-09:
 - **Row = day + 2.** The app maps rows by position and ignores column A's value.
 - On every write, column A gets the string `MM/DD/YYYY`; the sheet's locale may convert it to a date.
 - In/Out cells are set to number format `HH:mm` on write.
-- **Hours (E, I) are sheet formulas the owner controls; the app never reads them.** `fixHoursFormulas()`
-  replaces them with `=IF(OR(C3="",D3=""),"",ROUND(MOD(D3-C3,1)*1440)/60)` (format `0.00`).
+- **Hours (E, I) are sheet formulas the owner controls; the app never reads or writes them.** Exact
+  minute columns arrive in Phase 1B (D-021).
 - Month tabs created by the script get warning-only protection.
 - Rows past the month's last day are ignored.
 
@@ -164,9 +167,7 @@ The frontend still works if the old script is deployed:
    - If you use *New deployment* instead, the URL changes. Then update `DEFAULT_APPS_SCRIPT_URL` in
      `src/config.ts` (and any URL saved on devices via Settings).
    - Settings: Execute as **Me**, Who has access **Anyone**.
-4. Optional, once: pick `fixHoursFormulas` in the toolbar → **Run**. Approve permissions, then check the
-   log and one month tab.
-5. Run the post-deploy checks in `QA.md`.
+4. Run the post-deploy checks in `QA.md`.
 
 The frontend and backend can be deployed in either order (see Compatibility above).
 
@@ -177,5 +178,6 @@ The frontend and backend can be deployed in either order (see Compatibility abov
 - `githubPagesExport.ts` posts `{action:"submitShift", employeeName, date:"YYYY-MM-DD", …}`, which neither
   backend understands, so its saves fail. Its monthly view reads only its own localStorage.
 - The header pill says "Live" in demo mode.
-- There are no automated tests in the repo yet, and no `package-lock.json` (CI uses `npm install`).
+- `@types/react` isn't installed, so React code is effectively untyped (fixed in Phase 3).
+- CI doesn't run tests yet (Phase 3).
 - Employee-name variants (case or extra spaces inside the name) count as separate people.

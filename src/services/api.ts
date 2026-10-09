@@ -1,10 +1,12 @@
-import { DEFAULT_APPS_SCRIPT_URL, INITIAL_EMPLOYEES, calculateShiftHours, getTodayDateString } from '../config';
+import { DEFAULT_APPS_SCRIPT_URL, INITIAL_EMPLOYEES } from '../config';
 import { ShiftRecord, DaySchedule } from '../types';
 
 const STORAGE_KEY_URL = 'westside_vapes_script_url';
 const STORAGE_KEY_TIMESHEETS = 'westside_vapes_timesheets_data';
 const STORAGE_KEY_TIMETABLE = 'westside_vapes_timetable_data';
 const STORAGE_KEY_EMPLOYEES = 'westside_vapes_employees_data';
+
+const NOT_SAVED_MESSAGE = "Couldn't reach Google Sheets. The shift was NOT saved. Check the connection and try again.";
 
 // Retrieve saved Apps Script URL or default live deployment URL
 export function getSavedScriptUrl(): string {
@@ -23,35 +25,34 @@ function isSampleUrl(url: string): boolean {
   return !url || url.includes('SAMPLE_WESTSIDE_VAPES') || url.includes('your-apps-script-url');
 }
 
-// Helper: Format raw sheet time values into "HH:mm" strings
+// Helper: Normalise a time cell from the sheet into "HH:mm". The backend sends
+// display strings ("9:00", "09:00:00", "4:00 PM"); older deployments sent ISO dates.
+// Unrecognised values are returned as-is so they show up for review instead of
+// being replaced with made-up hours.
 function formatTimeString(val: any): string {
-  if (val === null || val === undefined || val === '') return '';
-  if (typeof val === 'string') {
-    const trimmed = val.trim();
-    if (!trimmed) return '';
-    // Handle ISO date strings e.g. "1899-12-30T09:00:00.000Z" or "2026-08-01T09:00:00.000Z"
-    if (trimmed.includes('T')) {
-      const d = new Date(trimmed);
-      if (!isNaN(d.getTime())) {
-        const hours = String(d.getHours()).padStart(2, '0');
-        const mins = String(d.getMinutes()).padStart(2, '0');
-        return `${hours}:${mins}`;
-      }
-    }
-    // Handle HH:mm or HH:mm:ss
-    const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
-    if (match) {
-      const h = String(parseInt(match[1], 10)).padStart(2, '0');
-      const m = match[2];
-      return `${h}:${m}`;
+  if (val === null || val === undefined) return '';
+  const trimmed = String(val).trim();
+  if (!trimmed) return '';
+
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/.exec(trimmed);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const meridiem = match[3]?.toUpperCase();
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${match[2]}`;
+  }
+
+  // Handle ISO date strings e.g. "1899-12-30T17:00:00.000Z"
+  if (trimmed.includes('T')) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const hours = String(d.getHours()).padStart(2, '0');
+      const mins = String(d.getMinutes()).padStart(2, '0');
+      return `${hours}:${mins}`;
     }
   }
-  if (val instanceof Date) {
-    const hours = String(val.getHours()).padStart(2, '0');
-    const mins = String(val.getMinutes()).padStart(2, '0');
-    return `${hours}:${mins}`;
-  }
-  return String(val);
+  return trimmed;
 }
 
 // Helper: Local storage caches for employees, timetable, and timesheets
@@ -120,6 +121,12 @@ function saveCachedTimesheets(records: ShiftRecord[]): void {
   }
 }
 
+function upsertCachedRecord(record: ShiftRecord): void {
+  const cached = getCachedTimesheets().filter((r) => !(r.date === record.date && r.shift === record.shift));
+  cached.unshift(record);
+  saveCachedTimesheets(cached);
+}
+
 export function getCachedTimesheet(month: number, year: number): ShiftRecord[] {
   const all = getCachedTimesheets();
   const monthPadded = String(month).padStart(2, '0');
@@ -138,7 +145,7 @@ export async function fetchEmployees(): Promise<{ employees: string[]; isMock: b
     const response = await fetch(`${scriptUrl}?action=getEmployees`, { method: 'GET' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    
+
     let cleaned: string[] = [];
     if (Array.isArray(data)) {
       cleaned = data.map(e => String(e).trim()).filter(Boolean);
@@ -158,7 +165,8 @@ export async function fetchEmployees(): Promise<{ employees: string[]; isMock: b
 }
 
 // 2. Fetch Timesheet for specific Month & Year from Google Sheets (e.g. tab "08-2026")
-export async function fetchTimesheet(month: number, year: number): Promise<{ records: ShiftRecord[]; isMock: boolean }> {
+// `failed` means the sheet couldn't be read and the records are the last saved copy.
+export async function fetchTimesheet(month: number, year: number): Promise<{ records: ShiftRecord[]; isMock: boolean; failed?: boolean }> {
   const scriptUrl = getSavedScriptUrl();
   const monthPadded = String(month).padStart(2, '0');
   const monthYear = `${monthPadded}-${year}`; // e.g., "08-2026"
@@ -173,56 +181,41 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
     const response = await fetch(`${scriptUrl}?action=getTimesheet&monthYear=${encodeURIComponent(monthYear)}`, { method: 'GET' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error(data?.message || 'Unexpected response from Apps Script');
+    }
 
     const records: ShiftRecord[] = [];
+    const daysInMonth = new Date(year, month, 0).getDate();
 
-    // Backend returns 2D array of spreadsheet values
-    if (Array.isArray(data)) {
-      // Row 0 & 1 are headers. Row 2 corresponds to Date 1 (Row 3 in Google Sheet)
-      for (let r = 2; r < data.length; r++) {
-        const row = data[r];
-        if (!Array.isArray(row)) continue;
+    const addShift = (dateStr: string, shift: 'Morning' | 'Evening', name: any, inVal: any, outVal: any) => {
+      const employeeName = name ? String(name).trim() : '';
+      if (!employeeName) return;
+      // Missing times stay empty (0 minutes, flagged for review) rather than
+      // defaulting to a full shift that may never have been worked.
+      records.push({
+        id: `shift_${dateStr}_${shift}`,
+        employeeName,
+        date: dateStr,
+        shift,
+        inTime: formatTimeString(inVal),
+        outTime: formatTimeString(outVal),
+        submittedAt: dateStr,
+      });
+    };
 
-        // Day number is r - 1 (or value in column 0)
-        const parsedDay = parseInt(row[0], 10);
-        const dayNum = !isNaN(parsedDay) && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : (r - 1);
-        const dayPadded = String(dayNum).padStart(2, '0');
-        const dateStr = `${year}-${monthPadded}-${dayPadded}`; // "YYYY-MM-DD"
+    // Rows 0 & 1 are headers; row index day + 1 holds that day (sheet row day + 2),
+    // the same position doPost writes to. Column A isn't trusted for the day number
+    // because the sheet may store it as a date, a string, or nothing.
+    for (let day = 1; day <= daysInMonth; day++) {
+      const row = data[day + 1];
+      if (!Array.isArray(row)) continue;
+      const dateStr = `${year}-${monthPadded}-${String(day).padStart(2, '0')}`; // "YYYY-MM-DD"
 
-        // Morning Shift: Col B (1), Col C (2), Col D (3)
-        const morningName = row[1] ? String(row[1]).trim() : '';
-        if (morningName && morningName.toLowerCase() !== 'name' && morningName.toLowerCase() !== 'employee name') {
-          const inTime = formatTimeString(row[2]) || '09:00';
-          const outTime = formatTimeString(row[3]) || '16:00';
-          records.push({
-            id: `shift_${dateStr}_Morning`,
-            employeeName: morningName,
-            date: dateStr,
-            shift: 'Morning',
-            inTime,
-            outTime,
-            totalHours: calculateShiftHours(inTime, outTime),
-            submittedAt: dateStr,
-          });
-        }
-
-        // Evening Shift: Col F (5), Col G (6), Col H (7)
-        const eveningName = row[5] ? String(row[5]).trim() : '';
-        if (eveningName && eveningName.toLowerCase() !== 'name' && eveningName.toLowerCase() !== 'employee name') {
-          const inTime = formatTimeString(row[6]) || '16:00';
-          const outTime = formatTimeString(row[7]) || '23:00';
-          records.push({
-            id: `shift_${dateStr}_Evening`,
-            employeeName: eveningName,
-            date: dateStr,
-            shift: 'Evening',
-            inTime,
-            outTime,
-            totalHours: calculateShiftHours(inTime, outTime),
-            submittedAt: dateStr,
-          });
-        }
-      }
+      // Morning Shift: Col B (1), Col C (2), Col D (3)
+      addShift(dateStr, 'Morning', row[1], row[2], row[3]);
+      // Evening Shift: Col F (5), Col G (6), Col H (7)
+      addShift(dateStr, 'Evening', row[5], row[6], row[7]);
     }
 
     const allCached = getCachedTimesheets();
@@ -232,7 +225,7 @@ export async function fetchTimesheet(month: number, year: number): Promise<{ rec
   } catch (err) {
     console.warn('Google Apps Script timesheet fetch failed, using cached dataset:', err);
     const filtered = getCachedTimesheet(month, year);
-    return { records: filtered, isMock: true };
+    return { records: filtered, isMock: true, failed: true };
   }
 }
 
@@ -259,7 +252,7 @@ export async function fetchTimetable(): Promise<{ timetable: DaySchedule[]; isMo
         if (foundRow) {
           const mVal = foundRow[1] ? String(foundRow[1]).trim() : '';
           const eVal = foundRow[2] ? String(foundRow[2]).trim() : '';
-          
+
           if (mVal && !['morning', 'morning shift', 'employee', 'name'].includes(mVal.toLowerCase())) {
             morningEmp = mVal;
           }
@@ -285,6 +278,23 @@ export async function fetchTimetable(): Promise<{ timetable: DaySchedule[]; isMo
   }
 }
 
+// POST to Apps Script doPost(e). Throws on network failure or a non-JSON reply.
+async function postToScript(scriptUrl: string, body: object): Promise<any> {
+  const response = await fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+
+function splitDate(date: string): { monthYear: string; dayNum: number } {
+  // "YYYY-MM-DD" -> monthYear "MM-YYYY" e.g. "08-2026", day number e.g. 1
+  const [year, monthStr, day] = date.split('-');
+  return { monthYear: `${monthStr}-${year}`, dayNum: parseInt(day, 10) };
+}
+
 // 4. Submit Shift Log directly to Google Apps Script doPost(e)
 export async function submitShiftApi(payload: {
   employeeName: string;
@@ -302,16 +312,10 @@ export async function submitShiftApi(payload: {
   isMock: boolean;
 }> {
   const scriptUrl = getSavedScriptUrl();
-  const totalHours = calculateShiftHours(payload.inTime, payload.outTime);
+  const { monthYear, dayNum } = splitDate(payload.date);
 
-  // Parse YYYY-MM-DD into monthYear e.g. "08-2026" and date number e.g. 1
-  const parts = payload.date.split('-');
-  const year = parts[0];
-  const monthStr = parts[1];
-  const dayNum = parseInt(parts[2], 10);
-  const monthYear = `${monthStr}-${year}`;
-
-  // Check for conflicts in local cache if forceOverwrite is false
+  // Quick conflict check against the local cache. The backend repeats this check
+  // against the live sheet, so a stale cache can't silently overwrite a shift.
   if (!payload.forceOverwrite) {
     const cached = getCachedTimesheets();
     const existing = cached.find(r => r.date === payload.date && r.shift === payload.shift);
@@ -334,7 +338,7 @@ export async function submitShiftApi(payload: {
   }
 
   // Construct payload matching Google Apps Script doPost expectation:
-  // { monthYear: "08-2026", date: 1, shift: "Morning", name: "John", inTime: "08:00", outTime: "16:00" }
+  // { monthYear: "08-2026", date: 1, shift: "Morning", name: "John", inTime: "08:00", outTime: "16:00", force: false }
   const postBody = {
     monthYear,
     date: dayNum,
@@ -342,6 +346,7 @@ export async function submitShiftApi(payload: {
     name: payload.employeeName,
     inTime: payload.inTime,
     outTime: payload.outTime,
+    force: !!payload.forceOverwrite,
   };
 
   const newRecord: ShiftRecord = {
@@ -351,20 +356,11 @@ export async function submitShiftApi(payload: {
     shift: payload.shift,
     inTime: payload.inTime,
     outTime: payload.outTime,
-    totalHours,
     submittedAt: new Date().toISOString(),
   };
 
   if (isSampleUrl(scriptUrl)) {
-    const cached = getCachedTimesheets();
-    const idx = cached.findIndex(r => r.date === payload.date && r.shift === payload.shift);
-    if (idx !== -1) {
-      cached[idx] = newRecord;
-    } else {
-      cached.unshift(newRecord);
-    }
-    saveCachedTimesheets(cached);
-
+    upsertCachedRecord(newRecord);
     return {
       success: true,
       hasConflict: false,
@@ -375,26 +371,36 @@ export async function submitShiftApi(payload: {
   }
 
   try {
-    const response = await fetch(scriptUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(postBody),
-    });
+    const result = await postToScript(scriptUrl, postBody);
 
-    const result = await response.json();
-
-    // Update local cache
-    const cached = getCachedTimesheets();
-    const idx = cached.findIndex(r => r.date === payload.date && r.shift === payload.shift);
-    if (idx !== -1) {
-      cached[idx] = newRecord;
-    } else {
-      cached.unshift(newRecord);
+    if (result?.status === 'conflict') {
+      const prev = result.previousData || {};
+      return {
+        success: false,
+        hasConflict: true,
+        previousRecord: {
+          id: newRecord.id,
+          employeeName: String(prev.name || ''),
+          date: payload.date,
+          shift: payload.shift,
+          inTime: formatTimeString(prev.inTime),
+          outTime: formatTimeString(prev.outTime),
+          submittedAt: '',
+        },
+        message: `A shift is already logged for ${payload.date} (${payload.shift} Shift).`,
+        isMock: false,
+      };
     }
-    saveCachedTimesheets(cached);
 
+    if (result?.status !== 'success') {
+      return {
+        success: false,
+        message: `Not saved: ${result?.message || 'Google Sheets rejected the update.'}`,
+        isMock: false,
+      };
+    }
+
+    upsertCachedRecord(newRecord);
     return {
       success: true,
       hasConflict: false,
@@ -404,23 +410,14 @@ export async function submitShiftApi(payload: {
     };
   } catch (err: any) {
     console.error('Error posting shift to Google Apps Script:', err);
-    // Fallback cache save
-    const cached = getCachedTimesheets();
-    cached.unshift(newRecord);
-    saveCachedTimesheets(cached);
-
-    return {
-      success: true,
-      hasConflict: false,
-      message: 'Shift saved locally (network issue).',
-      record: newRecord,
-      isMock: true,
-    };
+    // Don't pretend it was saved: a locally cached shift is wiped on the next
+    // sheet refresh and would never be paid.
+    return { success: false, message: NOT_SAVED_MESSAGE, isMock: false };
   }
 }
 
 // 5. Update Shift Entry
-export async function updateShiftApi(record: ShiftRecord): Promise<{ success: boolean; isMock: boolean }> {
+export async function updateShiftApi(record: ShiftRecord): Promise<{ success: boolean; message?: string; isMock: boolean }> {
   return submitShiftApi({
     employeeName: record.employeeName,
     date: record.date,
@@ -432,7 +429,7 @@ export async function updateShiftApi(record: ShiftRecord): Promise<{ success: bo
 }
 
 // 6. Delete Shift Entry by clearing values in Google Sheets
-export async function deleteShiftApi(id: string, record?: ShiftRecord): Promise<{ success: boolean; isMock: boolean }> {
+export async function deleteShiftApi(id: string, record?: ShiftRecord): Promise<{ success: boolean; message?: string; isMock: boolean }> {
   const scriptUrl = getSavedScriptUrl();
 
   let targetDate = record?.date;
@@ -449,14 +446,10 @@ export async function deleteShiftApi(id: string, record?: ShiftRecord): Promise<
   }
 
   if (!targetDate || !targetShift) {
-    return { success: false, isMock: false };
+    return { success: false, message: 'Could not identify the shift to delete.', isMock: false };
   }
 
-  const parts = targetDate.split('-');
-  const year = parts[0];
-  const monthStr = parts[1];
-  const dayNum = parseInt(parts[2], 10);
-  const monthYear = `${monthStr}-${year}`;
+  const { monthYear, dayNum } = splitDate(targetDate);
 
   // Post empty values to clear cells in Google Sheets
   const postBody = {
@@ -466,40 +459,48 @@ export async function deleteShiftApi(id: string, record?: ShiftRecord): Promise<
     name: '',
     inTime: '',
     outTime: '',
+    force: true,
   };
 
-  // Remove from cache
-  const cached = getCachedTimesheets().filter(r => r.id !== id && !(r.date === targetDate && r.shift === targetShift));
-  saveCachedTimesheets(cached);
+  const removeFromCache = () => {
+    const cached = getCachedTimesheets().filter(r => r.id !== id && !(r.date === targetDate && r.shift === targetShift));
+    saveCachedTimesheets(cached);
+  };
 
   if (isSampleUrl(scriptUrl)) {
+    removeFromCache();
     return { success: true, isMock: true };
   }
 
   try {
-    await fetch(scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(postBody),
-    });
+    const result = await postToScript(scriptUrl, postBody);
+    if (result?.status !== 'success') {
+      return { success: false, message: `Not deleted: ${result?.message || 'Google Sheets rejected the update.'}`, isMock: false };
+    }
+    removeFromCache();
     return { success: true, isMock: false };
   } catch (err) {
     console.error('Failed to clear shift in Apps Script:', err);
-    return { success: true, isMock: true };
+    return { success: false, message: "Couldn't reach Google Sheets. The shift was NOT deleted.", isMock: false };
   }
 }
 
-export async function updateTimetableLocal(timetable: DaySchedule[]): Promise<void> {
+export async function updateTimetableLocal(timetable: DaySchedule[]): Promise<{ success: boolean; message?: string }> {
   const scriptUrl = getSavedScriptUrl();
-  if (!isSampleUrl(scriptUrl)) {
-    try {
-      await fetch(scriptUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'updateTimetable', timetable }),
-      });
-    } catch (e) {
-      console.warn('Failed to sync timetable to Apps Script:', e);
+  if (isSampleUrl(scriptUrl)) {
+    saveCachedTimetable(timetable);
+    return { success: true };
+  }
+
+  try {
+    const result = await postToScript(scriptUrl, { action: 'updateTimetable', timetable });
+    if (result?.status !== 'success') {
+      return { success: false, message: `Roster not saved: ${result?.message || 'Google Sheets rejected the update.'}` };
     }
+    saveCachedTimetable(timetable);
+    return { success: true };
+  } catch (e) {
+    console.warn('Failed to sync timetable to Apps Script:', e);
+    return { success: false, message: "Couldn't reach Google Sheets. The roster was NOT saved." };
   }
 }

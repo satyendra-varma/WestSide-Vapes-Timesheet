@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Clock, User, Check, X } from 'lucide-react';
 import { ShiftRecord } from '../types';
+import { formatDuration, shiftMinutes } from '../utils/hours';
 
 interface ConflictModalProps {
   isOpen: boolean;
@@ -11,7 +12,6 @@ interface ConflictModalProps {
     shift: 'Morning' | 'Evening';
     inTime: string;
     outTime: string;
-    totalHours: number;
   } | null;
   onCancel: () => void;
   onConfirmOverwrite: () => void;
@@ -64,7 +64,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({
                 {previousRecord.inTime} - {previousRecord.outTime}
               </p>
               <p className="text-[11px] text-amber-400/90 font-bold">
-                {previousRecord.totalHours} hrs worked
+                {formatDuration(shiftMinutes(previousRecord.inTime, previousRecord.outTime))} worked
               </p>
             </div>
           </div>
@@ -84,7 +84,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({
                 {newSubmission.inTime} - {newSubmission.outTime}
               </p>
               <p className="text-[11px] text-emerald-400 font-bold">
-                {newSubmission.totalHours} hrs worked
+                {formatDuration(shiftMinutes(newSubmission.inTime, newSubmission.outTime))} worked
               </p>
             </div>
           </div>

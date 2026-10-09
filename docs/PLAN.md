@@ -6,16 +6,17 @@ Execution order: **0 → 1A → 1B → 3 → 2 → 4 → 5 → 6 → 7 → 8.** 
 cut from `dev` and merged back into `dev` when it's green. `main` is never touched by Claude.
 
 ## Phase 0: Minute-based hours (`phase/0-minute-hours`)
-- [ ] Audit: run build + `tsc --noEmit`; list every place hours are calculated, rounded or summed
-- [ ] `src/utils/hours.ts` is the single source of truth (integer minutes, formatted once); no other
+- [x] Audit: run build + `tsc --noEmit`; list every place hours are calculated, rounded or summed
+      (results in PROGRESS 2026-10-09 Phase 0)
+- [x] `src/utils/hours.ts` is the single source of truth (integer minutes, formatted once); no other
       hours math anywhere (components, api, export, Apps Script, mock data)
-- [ ] Display `6h 20m` everywhere, with the decimal (`6.33`) secondary
-- [ ] Edge cases: overnight, identical in/out = 0 flagged "needs review", missing/invalid times flagged,
+- [x] Display `6h 20m` everywhere, with the decimal (`6.33`) secondary
+- [x] Edge cases: overnight, identical in/out = 0 flagged "needs review", missing/invalid times flagged,
       never NaN
-- [ ] Vitest set up; tests: 380 min → `6h 20m`/`6.33`; 31 × 6h20m = exactly 196h 20m; overnight;
+- [x] Vitest set up; tests: 380 min → `6h 20m`/`6.33`; 31 × 6h20m = exactly 196h 20m; overnight;
       invalid; per-employee totals; semi-monthly split; regression test proving round-then-sum was wrong
-- [ ] Real employee names removed from shipped data (`INITIAL_EMPLOYEES`)
-- [ ] `appsScriptTemplate.ts` restored as a generated `?raw` re-export of the backend + drift test
+- [x] Real employee names removed from shipped data (`INITIAL_EMPLOYEES`)
+- [x] `appsScriptTemplate.ts` restored as a generated `?raw` re-export of the backend + drift test
 - [ ] **(owner)** Verify real totals against a copy of the sheet (MORNING_CHECKLIST)
 
 ## Phase 1A: Authentication (`phase/1a-auth`)

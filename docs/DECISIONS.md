@@ -29,7 +29,7 @@ the app (D-002).
 *2026-10-09 · Accepted · Phase 0*
 
 The app never reads Hours (E/I); it recomputes from In/Out. The owner controls the sheet formulas.
-The optional `fixHoursFormulas()` makes them minute-exact (`ROUND(MOD(out-in,1)*1440)/60`, shown as
+(Superseded in part by D-021.) The optional `fixHoursFormulas()` made them minute-exact (`ROUND(MOD(out-in,1)*1440)/60`, shown as
 `0.00`), so sheet totals agree with the app. The owner runs it by hand because it overwrites formulas;
 it only touches tabs whose row-2 header in E/I is "Hours".
 
@@ -184,4 +184,19 @@ columns and tabs), so the old app keeps working during the overlap.
 
 Because the v2 frontend speaks only the v2 contract, it refuses to log in unless the backend reports
 `apiVersion: 2` (a no-data GET). This stops the new app from ever sending requests to the old script.
+
+## D-021: No decimal-hours sheet formulas; `fixHoursFormulas` removed before any deploy
+*2026-10-09 · Accepted · Phase 0*
+
+`fixHoursFormulas` (session 1) wrote `ROUND(...*1440)/60` into the Hours columns E/I. It was never
+deployed. It's removed because the owner asked for no decimal-hours formulas and because it overwrote
+the owner's own columns. Phase 1B instead adds **new** integer-minute columns and a summary that sums
+minutes. E/I stay as the owner left them.
+
+## D-022: Hours helpers live only in `src/utils/hours.ts`; pay periods in `src/utils/periods.ts`
+*2026-10-09 · Accepted · Phase 0*
+
+Components import from these files instead of doing their own arithmetic (e.g. the 12-hour warning
+uses `LONG_SHIFT_MINUTES`; the review flag uses `needsReview`). The legacy standalone HTML export has no
+hours math, so there's nothing to mirror. It's removed in Phase 1A because it can't authenticate.
 

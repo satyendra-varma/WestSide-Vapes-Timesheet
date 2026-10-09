@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Sun, Moon, CheckCircle, RefreshCw, AlertCircle, ShieldAlert } from 'lucide-react';
-import { SHOP_INFO, getTodayDateString, calculateShiftHours } from '../config';
+import { SHOP_INFO, getTodayDateString } from '../config';
 import { fetchEmployees, submitShiftApi, getCachedEmployees } from '../services/api';
 import { ShiftRecord } from '../types';
 import { ConflictModal } from './ConflictModal';
+import { LONG_SHIFT_MINUTES, formatDecimalHours, formatDuration, isOvernight, shiftMinutes } from '../utils/hours';
 
 interface ShiftLoggingTabProps {
   onShiftSubmittedSuccess: () => void;
@@ -17,7 +18,8 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
   // Form states
   const [employees, setEmployees] = useState<string[]>(cachedList);
   const [loadingEmp, setLoadingEmp] = useState<boolean>(cachedList.length === 0);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>(cachedList[0] || '');
+  // Starts blank so nobody logs hours under the first name in the list by accident
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [shiftDate, setShiftDate] = useState<string>(todayStr);
   const [shiftType, setShiftType] = useState<'Morning' | 'Evening'>('Morning');
   const [inTime, setInTime] = useState<string>(SHOP_INFO.morningShift.defaultIn);
@@ -36,18 +38,13 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
     shift: 'Morning' | 'Evening';
     inTime: string;
     outTime: string;
-    totalHours: number;
   } | null>(null);
 
   // Load employees on mount
   useEffect(() => {
     loadStaffList();
     const handleRefreshed = () => {
-      const fresh = getCachedEmployees();
-      setEmployees(fresh);
-      if (fresh.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(fresh[0]);
-      }
+      setEmployees(getCachedEmployees());
     };
     window.addEventListener('westside_vapes_data_refreshed', handleRefreshed);
     return () => window.removeEventListener('westside_vapes_data_refreshed', handleRefreshed);
@@ -58,9 +55,6 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
     try {
       const res = await fetchEmployees();
       setEmployees(res.employees);
-      if (res.employees.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(res.employees[0]);
-      }
     } catch (err) {
       console.error('Failed to load employees:', err);
     } finally {
@@ -80,8 +74,14 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
     }
   };
 
-  // Calculate live shift hours
-  const totalHours = calculateShiftHours(inTime, outTime);
+  // Calculate live shift length
+  const minutes = shiftMinutes(inTime, outTime);
+  const overnight = isOvernight(inTime, outTime);
+  const durationWarning = overnight
+    ? 'Out time is before in time, so this counts as a shift past midnight. Double-check the times.'
+    : minutes > LONG_SHIFT_MINUTES
+      ? 'This shift is over 12 hours. Double-check the times.'
+      : null;
 
   // Date change handler with strict future blocking
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +104,11 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
 
     if (!selectedEmployee) {
       setToastMessage({ type: 'error', text: 'Please select an employee name.' });
+      return;
+    }
+
+    if (minutes === 0) {
+      setToastMessage({ type: 'error', text: 'Shift length is 0. Check the in and out times.' });
       return;
     }
 
@@ -130,7 +135,6 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
           shift: shiftType,
           inTime,
           outTime,
-          totalHours,
         });
         setConflictOpen(true);
         setSubmitting(false);
@@ -144,6 +148,8 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
           text: result.message || 'Shift logged successfully!',
         });
         setTimeout(() => setToastMessage(null), 4000);
+        // Clear the name so the next person on a shared device picks their own
+        setSelectedEmployee('');
         onShiftSubmittedSuccess();
       } else {
         setToastMessage({
@@ -226,11 +232,16 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
                 {loadingEmp ? (
                   <option value="">Fetching staff list...</option>
                 ) : (
-                  employees.map((emp) => (
-                    <option key={emp} value={emp} className="bg-slate-900 text-white">
-                      {emp}
+                  <>
+                    <option value="" disabled className="bg-slate-900 text-slate-400">
+                      Select your name
                     </option>
-                  ))
+                    {employees.map((emp) => (
+                      <option key={emp} value={emp} className="bg-slate-900 text-white">
+                        {emp}
+                      </option>
+                    ))}
+                  </>
                 )}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -333,11 +344,20 @@ export const ShiftLoggingTab: React.FC<ShiftLoggingTabProps> = ({ onShiftSubmitt
           </div>
 
           {/* Shift Duration Pill */}
-          <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-medium">Calculated Duration:</span>
-            <span className="font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl">
-              {totalHours} Hours
-            </span>
+          <div className="space-y-2">
+            <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Calculated Duration:</span>
+              <span className="font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl">
+                {formatDuration(minutes)}
+                <span className="text-emerald-400/60 font-bold"> · {formatDecimalHours(minutes)} h</span>
+              </span>
+            </div>
+            {durationWarning && (
+              <p className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                {durationWarning}
+              </p>
+            )}
           </div>
 
           {/* 5. Submit Button */}
