@@ -75,10 +75,13 @@ real backend. Missing: CI, strict mode, backend pure-helper tests, and rule enfo
       (MORNING_CHECKLIST step 7)
 
 ## Phase 2: Payroll views, no money (`phase/2-payroll-views`)
-- [ ] Per-employee summary table: shifts, total h:mm, decimal, needs-review count; period toggle full /
-      1–15 / 16–end
-- [ ] Manager-only CSV export (summary + daily rows) with formula-injection guard (`= + - @` prefixed)
-- [ ] Shift hours `6h 20m` with decimal secondary
+Audit (2026-10-09): the period toggle and per-employee totals existed as a list; no CSV; shift rows
+showed only h:mm.
+- [x] Per-employee summary **table**: shifts, total h:mm, decimal, needs-review count, total row; period
+      toggle full / 1–15 / 16–end
+- [x] Manager-only CSV export (summary + daily rows) with formula-injection guard (D-037)
+- [x] Shift hours `6h 20m` with decimal secondary on every row, the summary, totals and the edit dialog
+- [x] Tests: `src/utils/csv.test.ts` (12)
 
 ## Phase 4: Data completeness (`phase/4-data-completeness`)
 - [ ] Edit shift (server-validated); delete manager-only; every change audited (who, when, old → new)

@@ -333,3 +333,17 @@ type-checked. Adding them early produced no errors. Strict mode itself stays in 
   arithmetic outside `hours.ts`, no pay logic, no app data in localStorage, no console logging.
 - Unused AI Studio dependencies were removed to cut install size and supply-chain surface.
 
+## D-037: Payroll CSV export is manager-only, client-side, and time-only
+*2026-10-09 · Accepted · Phase 2*
+
+- The CSV is built in the browser from data the manager already has; no new backend action and no
+  storage. It contains time only (minutes, h:mm, decimal hours), never money (D-014).
+- Two files: per-employee summary (with an all-staff total) and daily shift rows, for the selected
+  period and the employee filter, if one is set.
+- Minutes are included so payroll can work from exact integers.
+- Formula-injection guard: any cell starting with `= + - @` (plus tab and CR, per OWASP) gets a leading
+  `'`.
+- UTF-8 BOM and CRLF line endings for Excel.
+- The plain-text Copy summary stays available to everyone because staff already see the same totals on
+  screen.
+

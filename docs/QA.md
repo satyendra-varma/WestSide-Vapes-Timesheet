@@ -26,6 +26,7 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/apiClient.test.ts` | real client ↔ real backend: transport (text/plain, token only in body), v1-backend refusal, network errors, conflicts, validation fields, unauthorized hook |
 | `tests/session.test.ts` | session only in sessionStorage, expiry, legacy purge, cache clearing, frontend/backend time-parsing parity |
 | `tests/backend/util.test.ts` | backend pure helpers: time/date/month parsing, PIN rules, formula-injection guard, constant-time compare, signed-byte hex, active flag |
+| `src/utils/csv.test.ts` | CSV injection guard (`= + - @` tab CR), RFC 4180 quoting, BOM/CRLF, summary + daily rows, totals equal the sum of daily minutes |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -59,6 +60,12 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
 - [ ] Staff see Edit only on their own rows and no Delete; the manager sees both.
 - [ ] Edit (staff, own row) saves; Delete (manager) removes the row.
 - [ ] Period switch and the Copy summary work; flagged shifts show the amber `0h`.
+- [ ] Hours by Employee is a table (Employee / Shifts / Hours / Decimal / Review + Total); tapping a
+      name filters the list.
+- [ ] Manager: **Summary CSV** and **Shifts CSV** download `westside-hours-<MM-YYYY>-<period>…csv`.
+      They open in Excel or Sheets with correct names; the minutes column adds up to the total. A name
+      starting with `=` shows as text. Staff have no CSV buttons.
+- [ ] Each shift row shows `6h 20m` with `6.33 h` underneath.
 
 **Timetable**
 - [ ] Staff see the roster without Edit buttons; the manager edits a day and the change persists across
