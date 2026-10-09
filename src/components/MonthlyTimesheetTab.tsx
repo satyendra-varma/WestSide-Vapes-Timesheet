@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Search, Filter, Clock, Edit2, Trash2, Check, RefreshCw, Users, Copy, AlertTriangle, WifiOff } from 'lucide-react';
+import { Calendar, Search, Filter, Clock, Edit2, Trash2, Check, RefreshCw, Users, Copy, AlertTriangle, WifiOff, Download } from 'lucide-react';
 import { ShiftRecord } from '../types';
 import { SHOP_INFO } from '../config';
 import { ApiError } from '../api/client';
@@ -8,6 +8,7 @@ import { toMonthYear, useEmployees, useTimesheet } from '../data/hooks';
 import { formatDecimalHours, formatDuration, needsReview, shiftMinutes, totalMinutes, totalsByEmployee } from '../utils/hours';
 import { PayPeriod, daysInMonth as getDaysInMonth, periodDayRange, recordsInPeriod } from '../utils/periods';
 import { Modal } from './Modal';
+import { downloadCsv, shiftsCsv, summaryCsv } from '../utils/csv';
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -95,6 +96,14 @@ export const MonthlyTimesheetTab: React.FC = () => {
       console.error('Failed to copy summary:', err);
     }
   };
+
+  // Manager-only CSV export of the selected period (and employee filter, if any).
+  const exportRecords = filterEmployee === 'ALL' ? periodRecords : periodRecords.filter((r) => r.employeeName === filterEmployee);
+  const exportBase = `westside-hours-${toMonthYear(selectedMonth)}-${period === 'full' ? 'month' : period === 'first' ? '01-15' : `16-${daysInMonth}`}${
+    filterEmployee === 'ALL' ? '' : `-${filterEmployee.replace(/[^A-Za-z0-9]+/g, '-')}`
+  }`;
+  const handleExportSummary = () => downloadCsv(`${exportBase}-summary.csv`, summaryCsv(totalsByEmployee(exportRecords), periodLabel));
+  const handleExportShifts = () => downloadCsv(`${exportBase}-shifts.csv`, shiftsCsv(exportRecords));
 
   // Open Edit Modal
   const openEditModal = (r: ShiftRecord) => {
@@ -270,8 +279,8 @@ export const MonthlyTimesheetTab: React.FC = () => {
             type="button"
             onClick={handleCopySummary}
             disabled={employeeTotals.length === 0}
-            className="text-xs font-extrabold text-slate-300 hover:text-emerald-400 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 transition-colors disabled:opacity-40"
-            title="Copy this summary for payroll"
+            className="min-h-11 text-xs font-extrabold text-slate-300 hover:text-emerald-400 flex items-center gap-1.5 px-3 rounded-lg bg-slate-950 border border-slate-800 transition-colors disabled:opacity-40"
+            aria-label="Copy this summary as text"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             {copied ? 'Copied' : 'Copy'}
@@ -279,42 +288,64 @@ export const MonthlyTimesheetTab: React.FC = () => {
         </div>
 
         {employeeTotals.length === 0 ? (
-          <p className="text-xs text-slate-500">No shifts in this period.</p>
+          <p className="text-xs text-slate-400">No shifts in this period.</p>
         ) : (
-          <div className="divide-y divide-slate-800/80">
-            {employeeTotals.map((t) => {
-              const isActive = filterEmployee === t.employeeName;
-              return (
-                <button
-                  key={t.employeeName}
-                  type="button"
-                  onClick={() => setFilterEmployee(isActive ? 'ALL' : t.employeeName)}
-                  className={`w-full flex items-center justify-between gap-3 py-2.5 px-2 -mx-2 rounded-xl text-left transition-colors ${
-                    isActive ? 'bg-cyan-500/10' : 'hover:bg-slate-800/40'
-                  }`}
-                  title={isActive ? 'Show all staff' : `Show only ${t.employeeName}`}
-                >
-                  <div className="min-w-0">
-                    <p className={`font-bold text-sm truncate ${isActive ? 'text-cyan-300' : 'text-white'}`}>{t.employeeName}</p>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      {t.shifts} shift{t.shifts === 1 ? '' : 's'}
-                      {t.needsReview > 0 && <span className="text-amber-400 font-bold"> · {t.needsReview} need review</span>}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-black text-sm text-emerald-400">{formatDuration(t.minutes)}</p>
-                    <p className="text-[11px] text-slate-500 font-bold">{formatDecimalHours(t.minutes)} h</p>
-                  </div>
-                </button>
-              );
-            })}
-            <div className="flex items-center justify-between gap-3 pt-2.5">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Total</span>
-              <span className="text-right">
-                <span className="font-black text-sm text-white block">{formatDuration(periodMinutes)}</span>
-                <span className="text-[11px] text-slate-500 font-bold block">{formatDecimalHours(periodMinutes)} h</span>
-              </span>
-            </div>
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs">
+              <caption className="sr-only">Hours by employee, {periodLabel}. Select a name to filter the shift list.</caption>
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                  <th scope="col" className="text-left font-extrabold py-2 px-1">Employee</th>
+                  <th scope="col" className="text-right font-extrabold py-2 px-1">Shifts</th>
+                  <th scope="col" className="text-right font-extrabold py-2 px-1">Hours</th>
+                  <th scope="col" className="text-right font-extrabold py-2 px-1">Decimal</th>
+                  <th scope="col" className="text-right font-extrabold py-2 px-1"><span aria-hidden="true">Review</span><span className="sr-only">Shifts needing review</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {employeeTotals.map((t) => {
+                  const isActive = filterEmployee === t.employeeName;
+                  return (
+                    <tr key={t.employeeName} className={isActive ? 'bg-cyan-500/10' : ''}>
+                      <th scope="row" className="text-left font-bold py-1 px-1 max-w-[9rem]">
+                        <button
+                          type="button"
+                          onClick={() => setFilterEmployee(isActive ? 'ALL' : t.employeeName)}
+                          aria-pressed={isActive}
+                          className={`min-h-11 w-full text-left truncate ${isActive ? 'text-cyan-300' : 'text-white hover:text-cyan-300'}`}
+                        >
+                          {t.employeeName}
+                        </button>
+                      </th>
+                      <td className="text-right text-slate-300 font-bold px-1">{t.shifts}</td>
+                      <td className="text-right font-black text-emerald-400 px-1 whitespace-nowrap">{formatDuration(t.minutes)}</td>
+                      <td className="text-right text-slate-400 font-bold px-1">{formatDecimalHours(t.minutes)}</td>
+                      <td className={`text-right font-bold px-1 ${t.needsReview > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{t.needsReview}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-700">
+                  <th scope="row" className="text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-400 py-2 px-1">Total</th>
+                  <td className="text-right text-slate-300 font-bold px-1">{employeeTotals.reduce((sum, t) => sum + t.shifts, 0)}</td>
+                  <td className="text-right font-black text-white px-1 whitespace-nowrap">{formatDuration(periodMinutes)}</td>
+                  <td className="text-right text-slate-300 font-bold px-1">{formatDecimalHours(periodMinutes)}</td>
+                  <td className={`text-right font-bold px-1 ${periodNeedsReview > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{periodNeedsReview}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {isManager && employeeTotals.length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={handleExportSummary} className="min-h-11 rounded-xl bg-slate-950 border border-slate-800 text-xs font-extrabold text-slate-200 hover:text-emerald-400 flex items-center justify-center gap-1.5">
+              <Download className="w-3.5 h-3.5" aria-hidden="true" /> Summary CSV
+            </button>
+            <button type="button" onClick={handleExportShifts} className="min-h-11 rounded-xl bg-slate-950 border border-slate-800 text-xs font-extrabold text-slate-200 hover:text-emerald-400 flex items-center justify-center gap-1.5">
+              <Download className="w-3.5 h-3.5" aria-hidden="true" /> Shifts CSV
+            </button>
           </div>
         )}
 
@@ -391,8 +422,9 @@ export const MonthlyTimesheetTab: React.FC = () => {
                     0h
                   </span>
                 ) : (
-                  <span className="text-xs font-black px-3 py-1.5 rounded-xl bg-slate-950 text-emerald-400 border border-slate-800">
+                  <span className="text-xs font-black px-3 py-1 rounded-xl bg-slate-950 text-emerald-400 border border-slate-800 text-right leading-tight">
                     {formatDuration(minutes)}
+                    <span className="block text-[10px] font-bold text-slate-400">{formatDecimalHours(minutes)} h</span>
                   </span>
                 )}
 

@@ -6,7 +6,8 @@ until the owner merges; see `PROGRESS.md` for status.
 ## What it is
 A mobile-first web app for WestSide Vapes (Kerrisdale) staff:
 - **Log Shift:** staff log their own shifts; the manager can log for anyone.
-- **Timesheet:** month view, pay periods (full / 1–15 / 16–end), hours per employee, edit/delete.
+- **Timesheet:** month view, pay periods (full / 1–15 / 16–end), per-employee table (shifts, h:mm,
+  decimal, needs-review), manager CSV export, edit/delete.
 - **Timetable:** weekly roster (one person per Morning/Evening slot); the manager edits it.
 - **Manager Settings:** staff PINs, unlocks, activate/deactivate, server address, backend code.
 
@@ -60,6 +61,7 @@ Script web app. The app holds data in memory only, for the length of a session.
 | `src/data/store.ts`, `src/data/hooks.ts` | In-memory cache + `useResource`; employees/timesheet/roster hooks. |
 | `src/utils/hours.ts` | **Only** place hours are computed (integer minutes). |
 | `src/utils/periods.ts` | Semi-monthly pay periods. |
+| `src/utils/csv.ts` | Manager CSV export (summary + shifts): RFC 4180, UTF-8 BOM, CRLF, formula-injection guard. |
 | `src/utils/appsScriptTemplate.ts` | `?raw` re-export of `apps-script/Code.gs` for Settings → Copy. |
 | `src/components/LoginScreen.tsx` | Login page and the "session expired" overlay. |
 | `src/components/Modal.tsx` | Accessible dialog (focus trap, Escape, focus restore). |

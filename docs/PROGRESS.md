@@ -3,6 +3,23 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 2 complete (payroll views, no money)
+- **Current phase:** 2 → merged into `dev`; next is Phase 4 (data completeness).
+- **Done:**
+  - Hours by Employee is now an accessible table with a review column.
+  - Manager-only Summary/Shifts CSV export (`src/utils/csv.ts`, injection guard, BOM, CRLF).
+  - Decimal secondary on shift rows.
+  - Verified with the mock backend: CSV contents match the table; staff see no CSV buttons.
+  - CI was green on GitHub for Phase 3.
+  - 133 tests.
+- **Next step:** Phase 4 on `phase/4-data-completeness`:
+  - edit and delete are already server-validated and audited (1A); confirm audit detail
+    (who, when, old → new) for every change;
+  - roster persistence and manager-only edits are done in 1A; verify every device reads from the sheet
+    (no local roster cache);
+  - add a "move shift" path? Out of scope (not in the prompt), so skip.
+- **Known problems:** none new.
+
 ## 2026-10-09: Phase 3 complete (tests + CI)
 - **Current phase:** 3 → merged into `dev`; next is Phase 2 (payroll views).
 - **Done:**
