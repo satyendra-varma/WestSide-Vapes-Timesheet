@@ -347,3 +347,16 @@ type-checked. Adding them early produced no errors. Strict mode itself stays in 
 - The plain-text Copy summary stays available to everyone because staff already see the same totals on
   screen.
 
+## D-038: Edits and deletes are conditional on what the user saw; stale data refreshes on focus
+*2026-10-09 · Accepted · Phase 4*
+
+- `forceOverwrite` alone let a manager's edit, or a delete, silently replace a change made on another
+  device after the dialog opened.
+- Now the client sends the slot it displayed (`expectedPrevious` / `expected`). The server compares it
+  inside the lock and answers `conflict` if it no longer matches. The UI says so, shows the current
+  values, and reloads.
+- To keep devices in step without polling, the in-memory cache re-fetches anything older than 60 s when
+  the app regains focus.
+- A "move shift to another date" action was considered and not added: it isn't in the plan, and
+  delete + re-log covers it, with both steps audited.
+

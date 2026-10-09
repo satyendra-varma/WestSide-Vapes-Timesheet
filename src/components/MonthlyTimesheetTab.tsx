@@ -121,6 +121,12 @@ export const MonthlyTimesheetTab: React.FC = () => {
   ].filter(Boolean)));
 
   const errorText = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback);
+  const slotOf = (r: ShiftRecord) => ({ name: r.employeeName, inTime: r.inTime, outTime: r.outTime });
+  const changedElsewhere = (err: ApiError) => {
+    const now = err.details.previousData;
+    const current = now && now.name ? `${now.name} ${now.inTime || '--:--'}-${now.outTime || '--:--'}` : 'empty';
+    return `This shift was changed on another device (now: ${current}). The list has been refreshed; please check it and try again.`;
+  };
 
   // Save Edit: the user is editing this exact slot, so the save replaces it (forceOverwrite).
   const handleSaveEdit = async () => {
@@ -135,11 +141,17 @@ export const MonthlyTimesheetTab: React.FC = () => {
         inTime: editInTime,
         outTime: editOutTime,
         forceOverwrite: true,
+        expectedPrevious: slotOf(editingRecord),
       });
       setEditingRecord(null);
       await timesheet.reload();
     } catch (err) {
-      if (!(err instanceof ApiError && err.code === 'unauthorized')) setEditError(`Not saved. ${errorText(err, 'Please try again.')}`);
+      if (err instanceof ApiError && err.code === 'conflict') {
+        setEditError(`Not saved. ${changedElsewhere(err)}`);
+        await timesheet.reload();
+      } else if (!(err instanceof ApiError && err.code === 'unauthorized')) {
+        setEditError(`Not saved. ${errorText(err, 'Please try again.')}`);
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -152,10 +164,15 @@ export const MonthlyTimesheetTab: React.FC = () => {
     setDeletingId(record.id);
     setActionError(null);
     try {
-      await api.deleteShift(record.date, record.shift);
+      await api.deleteShift(record.date, record.shift, slotOf(record));
       await timesheet.reload();
     } catch (err) {
-      if (!(err instanceof ApiError && err.code === 'unauthorized')) setActionError(`Not deleted. ${errorText(err, 'Please try again.')}`);
+      if (err instanceof ApiError && err.code === 'conflict') {
+        setActionError(`Not deleted. ${changedElsewhere(err)}`);
+        await timesheet.reload();
+      } else if (!(err instanceof ApiError && err.code === 'unauthorized')) {
+        setActionError(`Not deleted. ${errorText(err, 'Please try again.')}`);
+      }
     } finally {
       setDeletingId(null);
     }

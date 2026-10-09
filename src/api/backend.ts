@@ -18,7 +18,7 @@ export interface BackendApi {
   getEmployees(): Promise<EmployeeInfo[]>;
   getTimesheet(monthYear: string): Promise<TimesheetResult>;
   saveShift(input: SaveShiftInput): Promise<{ previousData: ShiftSlot }>;
-  deleteShift(date: string, shift: ShiftType): Promise<{ previousData: ShiftSlot }>;
+  deleteShift(date: string, shift: ShiftType, expected?: ShiftSlot): Promise<{ previousData: ShiftSlot }>;
   getTimetable(): Promise<RosterDay[]>;
   updateTimetable(timetable: RosterDay[]): Promise<RosterDay[]>;
   setPin(name: string, pin: string): Promise<{ name: string }>;
@@ -33,7 +33,7 @@ export function createBackendApi(token: string): BackendApi {
     getEmployees: () => call('getEmployees'),
     getTimesheet: (monthYear) => call('getTimesheet', { monthYear }),
     saveShift: (input) => call('saveShift', { ...input }),
-    deleteShift: (date, shift) => call('deleteShift', { date, shift }),
+    deleteShift: (date, shift, expected) => call('deleteShift', { date, shift, expected }),
     getTimetable: () => call('getTimetable'),
     updateTimetable: (timetable) => call('updateTimetable', { timetable }),
     setPin: (name, pin) => call('setPin', { name, pin }),

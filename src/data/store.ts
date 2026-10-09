@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { ApiError } from '../api/client';
 
 const cache = new Map<string, unknown>();
+const fetchedAt = new Map<string, number>();
 const listeners = new Set<() => void>();
+
+/** Cached data older than this is re-fetched when the app comes back into view. */
+export const REFRESH_AFTER_MS = 60_000;
 let version = 0;
 
 function notify(): void {
@@ -18,15 +22,24 @@ export function readCache<T>(key: string): T | undefined {
 
 export function writeCache<T>(key: string, value: T): void {
   cache.set(key, value);
+  fetchedAt.set(key, Date.now());
   notify();
 }
 
+/** True when `key` was loaded more than `maxAgeMs` ago (other devices may have changed it). */
+export function isStale(key: string, now = Date.now(), maxAgeMs = REFRESH_AFTER_MS): boolean {
+  const at = fetchedAt.get(key);
+  return at !== undefined && now - at > maxAgeMs;
+}
+
 export function invalidateCache(key: string): void {
+  fetchedAt.delete(key);
   if (cache.delete(key)) notify();
 }
 
 export function clearCache(): void {
   cache.clear();
+  fetchedAt.clear();
   notify();
 }
 
@@ -89,6 +102,21 @@ export function useResource<T>(key: string | null, loader: () => Promise<T>): Re
   useEffect(() => {
     setError(null);
   }, [key]);
+
+  // When the app comes back into view (tab switch, phone unlocked), refresh data that may have been
+  // changed on another device, so everyone converges on what the sheet says.
+  useEffect(() => {
+    if (key === null) return;
+    const refreshIfStale = () => {
+      if (document.visibilityState === 'visible' && isStale(key)) void load();
+    };
+    window.addEventListener('focus', refreshIfStale);
+    document.addEventListener('visibilitychange', refreshIfStale);
+    return () => {
+      window.removeEventListener('focus', refreshIfStale);
+      document.removeEventListener('visibilitychange', refreshIfStale);
+    };
+  }, [key, load]);
 
   return { data, loading: loading || (missing && !error), error, reload: load };
 }

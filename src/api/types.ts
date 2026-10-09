@@ -47,6 +47,8 @@ export interface SaveShiftInput {
   inTime: string;
   outTime: string;
   forceOverwrite?: boolean;
+  /** For edits: the slot as the user saw it. If the sheet changed since, the server returns a conflict. */
+  expectedPrevious?: ShiftSlot;
 }
 
 export interface RosterDay {

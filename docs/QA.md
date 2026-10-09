@@ -27,6 +27,8 @@ Never commit on a failing check. Never write test data to the live sheet.
 | `tests/session.test.ts` | session only in sessionStorage, expiry, legacy purge, cache clearing, frontend/backend time-parsing parity |
 | `tests/backend/util.test.ts` | backend pure helpers: time/date/month parsing, PIN rules, formula-injection guard, constant-time compare, signed-byte hex, active flag |
 | `src/utils/csv.test.ts` | CSV injection guard (`= + - @` tab CR), RFC 4180 quoting, BOM/CRLF, summary + daily rows, totals equal the sum of daily minutes |
+| `tests/backend/completeness.test.ts` | edit/delete conflict when the slot changed since it was loaded, audit who/when/old→new, shared roster |
+| `tests/store.test.ts` | cache staleness rules for refresh-on-focus |
 | `tests/codeRules.test.ts` | no `any`; no hours arithmetic outside `hours.ts`; no pay/wage logic in shipped code; only the URL override in localStorage; no console logging |
 
 The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Google services
@@ -66,6 +68,11 @@ The backend tests run the **generated `Code.gs`** in a Node `vm` with fake Googl
       They open in Excel or Sheets with correct names; the minutes column adds up to the total. A name
       starting with `=` shows as text. Staff have no CSV buttons.
 - [ ] Each shift row shows `6h 20m` with `6.33 h` underneath.
+
+- [ ] Two browsers as manager: open Edit on the same shift in both, save in A, then save in B. B says
+      the shift changed on another device, shows the current values, refreshes, and writes nothing.
+      Same for Delete.
+- [ ] Switch to another tab for over a minute and come back: the Timesheet and roster re-fetch.
 
 **Timetable**
 - [ ] Staff see the roster without Edit buttons; the manager edits a day and the change persists across

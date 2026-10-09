@@ -3,6 +3,24 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 4 complete (data completeness)
+- **Current phase:** 4 → merged into `dev`; next is Phase 5 (reliability + polish).
+- **Done:**
+  - Optimistic concurrency for edits/deletes (server conflict if the slot changed since it was
+    loaded; UI explains and reloads).
+  - Cache refresh on focus for anything older than 60 s.
+  - Audit trail and shared-roster tests.
+  - D-038. 143 tests.
+- **Next step:** Phase 5 on `phase/5-reliability-polish`:
+  - offline queue for shift logs only (localStorage, per-user, visible queued/failed state, retry,
+    warn and clear on logout);
+  - PWA (manifest, icons, service worker for same-origin static assets only);
+  - in-app confirm dialog instead of `window.confirm`;
+  - accessibility pass;
+  - shop name + API URL in config (done), event-name constant (event removed in 1A);
+  - manager Audit viewer (new `getAudit` action).
+- **Known problems:** none new.
+
 ## 2026-10-09: Phase 2 complete (payroll views, no money)
 - **Current phase:** 2 → merged into `dev`; next is Phase 4 (data completeness).
 - **Done:**
