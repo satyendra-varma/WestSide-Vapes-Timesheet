@@ -1,0 +1,44 @@
+# Checks every push and pull request on every branch. It never deploys: GitHub Pages deployment is
+# the separate deploy.yml workflow, which the owner manages.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (from lockfile)
+        run: npm ci
+
+      - name: Typecheck (strict)
+        run: npm run lint
+
+      - name: Backend bundle is up to date
+        run: npm run check:gas
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

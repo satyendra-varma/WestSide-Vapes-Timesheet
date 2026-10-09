@@ -62,11 +62,17 @@ shift, HH:mm, active employee) already landed with 1A. Missing: text storage and
       (MORNING_CHECKLIST steps 4–5)
 
 ## Phase 3: Tests + CI (`phase/3-tests-ci`)
-- [ ] Vitest across hours, auth, validation, conflict, API client against the mock backend
-- [ ] Strict TypeScript; no `any` in new code
-- [ ] GitHub Actions: on push + PR to any branch: install, typecheck, build, test (no deploy changes)
-- [ ] Lockfile committed (done in Phase 0), CI uses `npm ci`
-- [ ] **(owner)** Wire deploy-on-main yourself if wanted; optionally protect `main`
+Audit (2026-10-09): suites already cover hours, auth, validation, conflicts and the client against the
+real backend. Missing: CI, strict mode, backend pure-helper tests, and rule enforcement.
+- [x] Vitest across hours, auth, validation, conflict, API client against the mock backend, plus backend
+      pure helpers (`tests/backend/util.test.ts`) and repo rules (`tests/codeRules.test.ts`): 121 tests
+- [x] Strict TypeScript (`strict: true`); no `any` anywhere (enforced by test)
+- [x] GitHub Actions `ci.yml`: on push + PR to any branch: `npm ci`, typecheck, `check:gas`, build, test;
+      no deploy changes (D-036)
+- [x] Lockfile committed; CI uses `npm ci`
+- [x] Unused dependencies removed; `.env.example` documents `VITE_APPS_SCRIPT_URL`
+- [ ] **(owner)** Optionally add tests to `deploy.yml` or protect `main` with the CI check
+      (MORNING_CHECKLIST step 7)
 
 ## Phase 2: Payroll views, no money (`phase/2-payroll-views`)
 - [ ] Per-employee summary table: shifts, total h:mm, decimal, needs-review count; period toggle full /

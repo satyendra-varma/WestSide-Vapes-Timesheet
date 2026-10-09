@@ -32,11 +32,13 @@ Script web app. The app holds data in memory only, for the length of a session.
  Script Properties: TOKEN_SECRET · PIN_PEPPER · auth.user.<name> (salt, hash, failures, lock, token version)
 ```
 
-- Stack: React 19, TypeScript 5.8, Vite 6, Tailwind CSS v4, lucide-react, Vitest 3.
+- Stack: React 19, TypeScript 5.8 (`strict`), Vite 6, Tailwind CSS v4, lucide-react, Vitest 3.
 - Hosting: `.github/workflows/deploy.yml` deploys `main` to GitHub Pages (base `/WestSide-Vapes-Timesheet/`).
   Claude never touches `main` or that workflow.
-- Unused dependencies left over from the AI Studio template: `@google/genai`, `express`, `dotenv`,
-  `motion`, `@types/express` (Phase 3).
+- CI: `.github/workflows/ci.yml` runs `npm ci`, typecheck, `check:gas`, build and tests on every push
+  and PR to any branch. It never deploys.
+- Unused AI Studio leftovers (`@google/genai`, `express`, `dotenv`, `motion`, `autoprefixer`,
+  `esbuild`, `@types/express`) were removed in Phase 3.
 
 ## File map
 
@@ -63,7 +65,8 @@ Script web app. The app holds data in memory only, for the length of a session.
 | `src/components/Modal.tsx` | Accessible dialog (focus trap, Escape, focus restore). |
 | `src/components/{ShiftLoggingTab,MonthlyTimesheetTab,TimetableTab,ConflictModal,Header,BottomNav}.tsx` | Screens. |
 | `src/components/{SettingsModal,StaffManager}.tsx` | Manager-only settings and staff/PIN management. |
-| `tests/**`, `src/**/*.test.ts` | Vitest suites (`npm test`). |
+| `tests/**`, `src/**/*.test.ts` | Vitest suites (`npm test`); `tests/codeRules.test.ts` enforces repo rules (no `any`, no hours math outside `hours.ts`, no pay logic, no localStorage data, no console logging). |
+| `.github/workflows/ci.yml` | CI (checks only). `deploy.yml` is the owner's GitHub Pages workflow; Claude doesn't touch it. |
 | `.env.mock` | `VITE_APPS_SCRIPT_URL=http://localhost:8787/exec` for `npm run dev:mock` (not a secret). |
 
 ## Data model (frontend)
@@ -200,5 +203,4 @@ script.
   broken).
 
 ## Known gaps (tracked in PLAN.md)
-- Phase 3: CI on GitHub, strict TypeScript, unused-dependency cleanup.
 - Phase 5: offline queue (a network error now means "not saved, try again"), PWA, in-app confirm dialogs.

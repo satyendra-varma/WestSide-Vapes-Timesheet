@@ -84,4 +84,12 @@ real data without touching the live sheet:
 4. Then archive the old deployment: Apps Script → **Deploy → Manage deployments** → the old one →
    **Archive**. Staff with the old page open will get errors until they reload.
 
+## 7. CI and deploy wiring (Phase 3, optional but recommended)
+- GitHub → **Actions**: the new **CI** workflow runs on every push. Check it's green on `dev` before
+  you merge.
+- Your existing `deploy.yml` (deploy on push to `main`) was **not changed**. It runs `npm install` and
+  `npm run build` but no tests. If you want, add `npm ci` and `npm test` before its build step, or, in
+  repo **Settings → Branches**, protect `main` and require the **CI / check** status to pass before
+  merging.
+
 _(Later phases add steps below.)_

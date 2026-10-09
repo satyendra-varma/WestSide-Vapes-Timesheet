@@ -3,6 +3,21 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Phase 3 complete (tests + CI)
+- **Current phase:** 3 → merged into `dev`; next is Phase 2 (payroll views).
+- **Done:**
+  - `ci.yml` (checks only, every branch).
+  - `strict: true`.
+  - Backend util tests and code-rule tests (121 total).
+  - Removed 7 unused dependencies; refreshed `.env.example`.
+  - D-036; MORNING_CHECKLIST step 7 for deploy wiring.
+- **Next step:** Phase 2 on `phase/2-payroll-views`:
+  - per-employee summary table with h:mm, decimal and needs-review (exists; refine into a table);
+  - manager-only CSV export (summary + daily rows) with formula-injection guard;
+  - check that "6h 20m" is shown everywhere.
+- **Known problems:**
+  - CI hasn't been observed on GitHub yet; the first push of this branch triggers it.
+
 ## 2026-10-09: Phase 1B complete (backend hardening)
 - **Current phase:** 1B → merged into `dev`; next is Phase 3 (tests + CI).
 - **Done:**
