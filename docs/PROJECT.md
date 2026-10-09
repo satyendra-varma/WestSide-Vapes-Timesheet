@@ -281,4 +281,11 @@ script.
 - **Legacy standalone HTML export:** removed (couldn't authenticate; its request format was already
   broken).
 
-## Known gaps (tracked in PLAN.md)
+## Known limits (see DECISIONS D-018, D-045)
+- Auth is a 6-digit PIN protected by lockout. Anyone with edit access to the Sheet or the Apps Script
+  project can bypass it.
+- The public login endpoint can be spammed: each failed attempt adds an Audit row (Apps Script quotas
+  cap the rate).
+- Real Google services and the J–Q sheet formulas are exercised only through fakes and string checks in
+  CI; the owner's staging run (MORNING_CHECKLIST step 4) is the first real execution.
+- The old v1 deployment stays unauthenticated until the owner archives it (MORNING_CHECKLIST step 6.4).

@@ -41,6 +41,7 @@ Use `docs/PROJECT.md` (architecture, sheet layout, API contract) and `docs/QA.md
 ## Commands
 - `npm install`
 - `npm run lint` (tsc), `npm run build`, `npm test`
-- `npm run build:gas`: regenerate `apps-script/Code.gs`
-- `npm run mock`: local mock backend on http://localhost:8787
-- `npm run dev`: app at http://localhost:3000/WestSide-Vapes-Timesheet/ (set `VITE_APPS_SCRIPT_URL`)
+- `npm run build:gas`: regenerate `apps-script/Code.gs`; `npm run check:gas` verifies it (also in CI)
+- `npm run mock`: local mock backend on http://localhost:8787 (fake data; prints demo PINs)
+- `npm run dev:mock`: app against the mock backend at http://localhost:3000/WestSide-Vapes-Timesheet/
+- `npm run dev`: app against `VITE_APPS_SCRIPT_URL` (or `APPS_SCRIPT_URL` in `src/config.ts`)
