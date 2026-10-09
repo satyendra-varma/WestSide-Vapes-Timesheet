@@ -433,3 +433,12 @@ by `scripts/make-icons.ts` (no image library), and a test checks the committed P
   once. A request is deleted when it's fulfilled and its status changed more than N days ago (by date in
   the sheet's time zone).
 
+## D-043: An "unauthorized" reply only ends the session whose token was refused
+*2026-10-09 · Accepted · Fix found in Phase 7 testing*
+
+Browser testing found a race. A tab still held a stale session from a previous backend run; its
+in-flight requests were refused after a different user had logged in, and the late "unauthorized"
+reply expired the brand-new session. The client now passes the refused token to the auth layer, which
+expires only if that token is still the current one (tracked in a ref, not inside a state updater).
+Session-expiry timers pass their own token the same way.
+

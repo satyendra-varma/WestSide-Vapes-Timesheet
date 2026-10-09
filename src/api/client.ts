@@ -26,10 +26,14 @@ const KNOWN_CODES: ApiErrorCode[] = [
   'unauthorized', 'forbidden', 'locked', 'invalid_credentials', 'invalid', 'conflict', 'not_found', 'busy', 'server_error',
 ];
 
-let unauthorizedListener: (() => void) | null = null;
+let unauthorizedListener: ((token: string | undefined) => void) | null = null;
 
-/** The auth layer registers here to return to the login screen when a token is refused. */
-export function setUnauthorizedListener(listener: (() => void) | null): void {
+/**
+ * The auth layer registers here to return to the login screen when a token is refused. It receives the
+ * token that was refused, so a late reply to a request made with an older token can't end a newer
+ * session.
+ */
+export function setUnauthorizedListener(listener: ((token: string | undefined) => void) | null): void {
   unauthorizedListener = listener;
 }
 
@@ -91,7 +95,7 @@ export async function apiCall<T>(action: string, params: Record<string, unknown>
   }
   const rawCode = asString(body.code);
   const code: ApiErrorCode = rawCode && (KNOWN_CODES as string[]).includes(rawCode) ? (rawCode as ApiErrorCode) : 'server_error';
-  if (code === 'unauthorized') unauthorizedListener?.();
+  if (code === 'unauthorized') unauthorizedListener?.(token);
   throw new ApiError(code, message, {
     field: asString(body.field),
     retryAfterMinutes: typeof body.retryAfterMinutes === 'number' ? body.retryAfterMinutes : undefined,

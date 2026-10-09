@@ -3,6 +3,15 @@
 Dated log, newest first. Updated with **every commit** (a session can end at any moment). Each entry:
 Current phase / Done / Next step / Known problems.
 
+## 2026-10-09: Fix: late "unauthorized" replies (during Phase 7)
+- **Current phase:** 7 in progress on `phase/7-cash-count`.
+- **Done:** fixed a session race (D-043): a refused *old* token no longer logs out the *current*
+  session. Browser-verified: stale session, overlay, log out, log in as someone else; the new session
+  stays.
+- **Next step:** commit the Phase 7 cash count (backend + UI + tests are written and green), then
+  merge.
+- **Known problems:** none.
+
 ## 2026-10-09: Phase 6 complete (stock list + customer requests)
 - **Current phase:** 6 → merged into `dev`; next is Phase 7 (end-of-day cash count).
 - **Done:**
